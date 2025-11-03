@@ -1,3 +1,35 @@
-langchain
+smbprotocol
+pysmb
+py7zr
+streamlit
+pandas
+plotly
+matplotlib
+pynmea2
+jira
 ollama
-langchain_community
+redis
+fastapi
+uvicorn
+loguru
+chromadb-client
+onnxruntime
+tokenizers
+openai
+mcp
+pydlt_plus
+pexpect
+streamlit-tags
+humanize
+xxhash
+sqlalchemy
+psycopg2-binary
+
+#sudo apt-get install liblzma-dev
+#sudo apt-get install python3-lzma
+#sudo apt-get install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev liblzma-dev
+#sudo apt-get install -y libgdbm-dev libgdbm-compat-dev
+
+
+#sudo apt-get install p7zip-full
+#sudo apt-get install p7zip-full unzip tar gzip bzip2 unrar

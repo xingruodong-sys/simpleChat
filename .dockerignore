@@ -1,0 +1,9 @@
+.github
+__pycache__
+.venv
+Log
+logs
+test
+.git
+.history
+trace

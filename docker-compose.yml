@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:latest  # 使用最新版本的 Redis 镜像
+    container_name: redis_server  # 容器名称
+    ports:
+      - "6379:6379"  # 将容器的 6379 端口映射到宿主机的 6379 端口
+    volumes:
+      - redis_data:/data  # 持久化数据
+    command: redis-server --appendonly yes  # 启用 AOF 持久化
+
+  chroma_server:
+    image: chromadb/chroma
+    container_name: chroma_server
+    volumes:
+      - chroma_data:/data
+    ports:
+      - "8000:8000"
+    networks:
+      - internal
+
+  nais_pilot:
+    image: naispilot:latest
+    container_name: nais_pilot
+    ports:
+      - "8501:8501"
+      - "8001:8001"
+    volumes:
+      - logs
+    depends_on:
+      - chroma_server
+      - redis_server
+    environment:
+      - REDIS_HOST="0.0.0.0"
+      - REDIS_PORT=6379
+      - VECTOR_DB_HOST="0.0.0.0"
+      - VECTOR_DB_PORT=8000
+
+volumes:
+  redis_data:  # 定义一个名为 redis_data 的卷
