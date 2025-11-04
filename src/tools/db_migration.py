@@ -21,16 +21,6 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
 REDIS_PORT = int(os.getenv('REDIS_PORT_NAISPILOT', 6379))
 REDIS_PASSWORD = os.getenv('REDIS_PASSWD', '')
 
-# --- Redis Keys and Hashes to Migrate ---
-# This list should be comprehensive. Add any other keys if necessary.
-SIMPLE_KEYS_TO_SETTINGS = {
-    "settings:jira-modules": ("settings", "jira-modules"),
-    "settings:llm-monitoring": ("settings", "llm-monitoring"),
-    "settings:bert": ("settings", "bert"),
-    "settings:jira": ("settings", "jira"),
-    "settings:ollama": ("settings", "ollama"),
-    "settings:samba": ("settings", "samba"),
-}
 
 HASHES_TO_SETTINGS = {
     "HH_TO_SY_JIRA_HASH": "hh_to_sy_jira_hash",
@@ -85,50 +75,6 @@ def migrate_core_data(redis_client: redis.Redis):
     
     print(f"CoreData migration finished. {migrated_count} records processed.")
 
-def migrate_simple_keys(redis_client: redis.Redis):
-    """Migrates simple Redis keys to the KeyValue table."""
-    print("\nStarting simple key settings migration...")
-    migrated_count = 0
-    for redis_key, (category, pg_key) in SIMPLE_KEYS_TO_SETTINGS.items():
-        db = None
-        try:
-            db = SessionLocal()
-            value = redis_client.get(redis_key)
-            if value is not None:
-                crud.set_key_value(db, category=category, key=pg_key, value=value.decode('utf-8'))
-                print(f"  - Migrated '{redis_key}' to category='{category}', key='{pg_key}'")
-                migrated_count += 1
-        except Exception as e:
-            print(f"  - ERROR migrating key '{redis_key}': {e}")
-            if db:
-                db.rollback()
-        finally:
-            if db:
-                db.close()
-    print(f"Simple key migration finished. {migrated_count} keys processed.")
-
-def migrate_hashes(redis_client: redis.Redis):
-    """Migrates Redis hashes to the KeyValue table."""
-    print("\nStarting hash settings migration...")
-    migrated_count = 0
-    for redis_hash, category in HASHES_TO_SETTINGS.items():
-        all_fields = redis_client.hgetall(redis_hash)
-        if all_fields:
-            for field, value in all_fields.items():
-                db = None
-                try:
-                    db = SessionLocal()
-                    crud.set_key_value(db, category=category, key=field.decode('utf-8'), value=value.decode('utf-8'))
-                    migrated_count += 1
-                except Exception as e:
-                    print(f"  - ERROR migrating hash field '{redis_hash} -> {field.decode()}': {e}")
-                    if db:
-                        db.rollback()
-                finally:
-                    if db:
-                        db.close()
-            print(f"  - Migrated {len(all_fields)} fields from hash '{redis_hash}' to category='{category}'")
-    print(f"Hash migration finished. {migrated_count} fields processed.")
 
 # ==============================================================================
 # MAIN EXECUTION

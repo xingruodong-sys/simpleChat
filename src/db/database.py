@@ -3,8 +3,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from contextvars import ContextVar
 from typing import Union
+from src.utils.config import settings as config
 
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:123456@10.10.90.4/naispilot"
+SQLALCHEMY_DATABASE_URL = f"postgresql://{config.POSTGRESSQL_USERNAME}:{config.POSTGRESSQL_PASSWORD}@{config.POSTGRESSQL_HOST}/naispilot"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
@@ -27,5 +28,19 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+def standalone_session():
+    """
+    Provide a transactional scope around a series of operations for standalone scripts.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

@@ -5,29 +5,22 @@ from datetime import datetime, timedelta
 from src.helper import feishu, JiraSy
 from src.utils import settings, findlog, coreData
 from src.db import crud
-from src.db.database import SessionLocal
+from src.db.database import standalone_session
 import asyncio
-import time
 import requests
 
-
-async def blocking_task():
-    print("start blocking_task")
-    monitorSettings = settings.get_llm_monitoring_settings()
+async def delete_task(monitorSettings: settings.LlmMonitoringSettings):
     logPath = monitorSettings.analyzedLogPath
     maxLogNumber = monitorSettings.analyzedLogMaxNumber
-    while True:
-        findlog.delete_oldest_folder(logPath, maxLogNumber)
-        await time.sleep(monitorSettings.monitoringCycle)
+    findlog.delete_oldest_folder(logPath, maxLogNumber)
 
 # ======================================================================================
 # Monitoring Logic
 # ======================================================================================
 
 async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
-    db = SessionLocal()
     try:
-        jiraConfig = settings.get_jira_settings(db)
+        jiraConfig = settings.get_jira_settings()
         syJira = JiraSy.JiraImp(jira_server=str(jiraConfig.url), username=jiraConfig.username, password=jiraConfig.password)
         stuck_pending_timeout = timedelta(minutes=setting.pendingTimeout)
         stuck_bert_timeout = timedelta(minutes=setting.bertTimeout)
@@ -40,7 +33,7 @@ async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
         proxyName = setting.proxyName
         proxyPasswd = setting.proxyPasswd
 
-        active_tasks = crud.get_active_core_data(db)
+        active_tasks = crud.get_active_core_data()
 
         if not active_tasks:
             return
@@ -63,15 +56,15 @@ async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
                 syJira.assigneeIssue(task.id, reporter)
 
             # 2. Check for tasks stuck in BERT analysis
-            if task.bertStart > 0 and task.bertEnd == 0 and datetime.fromtimestamp(task.bertStart) < datetime.now() - stuck_bert_timeout:
+            if task.bert_start > 0 and task.bert_end == 0 and datetime.fromtimestamp(task.bert_start) < datetime.now() - stuck_bert_timeout:
                 bertingList.append(task.id)
 
             # 3. Check for tasks stuck in LLM analysis
-            if task.llmStart > 0 and task.llmEnd == 0 and datetime.fromtimestamp(task.llmStart) < datetime.now() - stuck_llm_timeout:
+            if task.llm_start > 0 and task.llm_end == 0 and datetime.fromtimestamp(task.llm_start) < datetime.now() - stuck_llm_timeout:
                 llmList.append(task.id)
 
             # 4. Check for tasks stuck in Tool analysis
-            if task.analyzeStart > 0 and task.analyzeEnd == 0 and datetime.fromtimestamp(task.analyzeStart) < datetime.now() - stuck_tool_timeout:
+            if task.analyze_start > 0 and task.analyze_end == 0 and datetime.fromtimestamp(task.analyze_start) < datetime.now() - stuck_tool_timeout:
                 toolList.append(task.id)
         
         if pendingList:
@@ -132,16 +125,15 @@ async def check_stuck_tasks_main():
     print("Starting the monitoring service...")
     while True:
         cycle_seconds = 60
-        db = SessionLocal()
         try:
-            setting = settings.get_llm_monitoring_settings(db)
-            if setting and setting.monitoringCycle:
-                cycle_seconds = setting.monitoringCycle * 60
-            check_stuck_tasks(setting)
+            with standalone_session() as db:
+                setting = settings.get_llm_monitoring_settings()
+                if setting and setting.monitoringCycle:
+                    cycle_seconds = setting.monitoringCycle * 60
+                check_stuck_tasks(setting)
+                delete_task(setting)
 
         except Exception as e:
             print(f"ERROR: An exception occurred during the monitoring cycle: {e}")
-        finally:
-            db.close()
         await asyncio.sleep(cycle_seconds)
 

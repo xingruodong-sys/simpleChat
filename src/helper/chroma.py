@@ -1,7 +1,7 @@
 import chromadb
 from chromadb.utils import embedding_functions
 import os
-from src.helper import Jira
+from helper import JiraSy
 from src.helper.Redis import *
 import time
 import re
@@ -69,7 +69,7 @@ def add_job(impl):
     try:
         for i in range(63614, 50000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = Jira.getIssueContentExt(issue_key)
+            content = JiraSy.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -102,7 +102,7 @@ def add_job_no_comments(impl):
     try:
         for i in range(65000, 55000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = Jira.getIssueContentExt(issue_key)
+            content = JiraSy.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -127,7 +127,7 @@ def add_job_no_comments_strip(impl):
     try:
         for i in range(65000, 50000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = Jira.getIssueContentExt(issue_key)
+            content = JiraSy.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -150,7 +150,7 @@ def add_job_no_comments_strip(impl):
         print(f"Error: {e}")
 
 def do_query(impl, key, strip=False):
-    content1 = Jira.getIssueContentExt(key)
+    content1 = JiraSy.getIssueContentExt(key)
     source = 'summary:' + content1['summary'] + '\n description:' + content1['description']
     res = impl.query(source)
     ids = res['ids']
@@ -159,14 +159,14 @@ def do_query(impl, key, strip=False):
     result = ''
     for issues in ids:
         for issue in issues:
-            content = Jira.getIssueContentExt(issue)
+            content = JiraSy.getIssueContentExt(issue)
             result = 'issue id : ' + issue + '\n' + 'summary:' + content['summary'] + '\n description:' + content['description'] + '\n comments: '
             for comment in content['comments']:
                 result = result + f'comment by {comment['name']}:{comment['body']}' + '\n'
     return result, ids, dis
 
 def do_query_strip(impl, key):
-    content1 = Jira.getIssueContentExt(key)
+    content1 = JiraSy.getIssueContentExt(key)
     if content1['type'] != 'Product bug':
         return [], [], [], [], False
     source = 'summary:' + remove_brackets_and_content(content1['summary']) + '\n description:' + str(content1['description'])

@@ -1,8 +1,3 @@
-from src.helper.Redis import *
-from src.helper import Ollama, Log, JiraSy
-import asyncio
-import json
-
 
 async def testMCPConnect():
     from Mcp.client import mcpClient
@@ -16,11 +11,11 @@ async def testMCPConnect():
             description = tool.description
             for key in tool.inputSchema['properties']:
                 print(key)
-             
     print(res)
 
 def testBert():
-    from webhooks import getComponentFromBertEx
+    from routers.webhooks import getComponentFromBertEx
+    from src.helper import JiraSy
     syjira = JiraSy.JiraImp('http://10.10.88.63:8080/', "xingrd", "mko0MKO)")
     for issue in range(290, 300):
         key = 'AINMASDK-' + str(issue)
@@ -31,16 +26,13 @@ def testBert():
         res = getComponentFromBertEx(summary, description)
         print(res)
 
-def testxxhash():
-    from src.utils.smbcopyer import XXHashFileChecker
-    checker = XXHashFileChecker("./trace/AINMASDK-55/check.json")
-    checker.verify_all_files("./trace/AINMASDK-347")
-
 def testassign():
+    from src.helper import JiraSy
     syjira = JiraSy.JiraImp('http://10.10.88.63:8080/', "xingrd", "mko0MKO)")
     syjira.assigneeIssue(issueKey="AINMASDK-347", user="Naiser-T3000")
 
 def testchangeIssueComponents():
+    from src.helper import JiraSy
     syjira = JiraSy.JiraImp('http://10.10.88.63:8080/', "xingrd", "1qaz!QAZ1qaz")
     components = []
     components.append("BL_DBU")
@@ -60,6 +52,7 @@ def test_find_logcat_files():
     print(find_logcat_files("./trace/AINMASDK-55", isDownload=False))
 
 def test_assignee():
+    from src.helper import JiraSy
     # syjira = JiraSy.JiraImp('http://10.10.88.63:8080/', "xingrd", "mko0MKO)")
     syJira = JiraSy.JiraImp('http://10.10.88.63:8080/', "Naiser-T3000", "1qaz!QAZ2w")
     syJira.assigneeIssue(issueKey="AINMASDK-3228", user="xingrd")
@@ -72,6 +65,8 @@ def test_json():
     json.loads(srcd)
 
 def getIssueJsonAll():
+    from src.helper import JiraSy
+    import json
     # https://naisjira.neusoft.com/browse/NMASDK-85203
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
 
@@ -85,7 +80,8 @@ def getIssueJsonAll():
         json.dump(issue.raw, f, ensure_ascii=False, indent=2)
 
 def testBertVR():
-    from webhooks import getComponentFromBertEx
+    from routers.webhooks import getComponentFromBertEx
+    from src.helper import JiraSy
     import csv
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
     jql = "project = NMASDK AND component = 'Voice Recognition'"
@@ -108,6 +104,7 @@ def testBertVR():
             writer.writerows(datas)
 
 def getAllFields():
+    from src.helper import JiraSy
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
     custom_fields = dejira.jira.fields()
     print(custom_fields[0])
@@ -116,20 +113,24 @@ def getAllFields():
         # print(field["name"], field["id"])
 
 def testComponentLead():
+    from src.helper import JiraSy
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
     leads = dejira.getProjectComponentsLead()
     print(leads["DBU"])
 
 def transition():
+    from src.helper import JiraSy
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
     dejira.transitionsIssue("NMASDK-87448", "To Repro")
 
 def testassigneeIssueDe():
+    from src.helper import JiraSy
     dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
     dejira.assigneeIssue(issueKey="NMASDK-87448", user="xingrd")
     
 
 def testMCP():
+    from src.helper import JiraSy
     syJira = JiraSy.JiraImp('http://10.10.88.63:8080/', "Naiser-T3000", "1qaz!QAZ2w")
     jql = "assignee = 'Naiser-T3000' AND resolution = unresolved ORDER BY priority DESC, created ASC"
     issues = syJira.getIssuesByJql(jql=jql)
@@ -154,6 +155,11 @@ def testGetModels():
     from src.helper import Ollama
     print(Ollama.get_modes())
 
+def testDeleteOldFolder():
+    from src.utils.findlog import delete_oldest_folder
+    delete_oldest_folder("./trace", 200)
+
+
 def main():
     # testMatchPath()
     # testMatchTime()
@@ -176,4 +182,5 @@ def main():
     # testIsLogcatFile()
     # testMatchTime()
     # asyncio.run(testChat())
-    testGetModels()
+    # testGetModels()
+    testDeleteOldFolder()

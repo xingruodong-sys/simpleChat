@@ -1,9 +1,6 @@
-import sys
-sys.path.append('/home/lix/Code/python/naispilot')
-from src.helper import Log, Jira, JiraSy
+from src.helper import Log, JiraSy
 from src.helper.Redis import *
 import json
-import csv
 
 def getTheFirstComponent(comments, current_component):
     devMember = [
@@ -231,7 +228,7 @@ if __name__ == "__main__":
         # for i in range(70000, 0, -1):
         for issue_key in keys:
             # issue_key = "NMASDK-" + str(i)
-            history = Jira.getIssueHistory(issue_key)
+            history = JiraSy.getIssueHistory(issue_key)
             # Print the formatted results
             if "error" in history:
                 Log.error(f"{issue_key} Error: {history['error']}")

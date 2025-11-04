@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_snake
 from enum import Enum
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict
@@ -36,27 +37,33 @@ class Status(Enum):
 # ======================================================================================
 
 class CoreData(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_snake,
+        from_attributes=True,
+        populate_by_name=True,
+    )
+
     id: str = ""
     created_at: float = 0
     status: int = 0
     exception_string: str = ""
 
-    isBert: bool = False
-    bertComponent: str = ""
-    bertStart: float = 0
-    bertEnd: float = 0
-    bertCorrect: bool = True
+    is_bert: bool = False
+    bert_component: str = ""
+    bert_start: float = 0
+    bert_end: float = 0
+    bert_correct: bool = True
 
-    isAnalyzed: bool = False
-    toolName: str = ""
-    analyzeStart: float = 0
-    analyzeEnd: float = 0
+    is_analyzed: bool = False
+    tool_name: str = ""
+    analyze_start: float = 0
+    analyze_end: float = 0
 
-    llmName: str = ""
-    llmStart: float = 0
-    llmEnd: float = 0
-    llmSuccess: bool = False
-    llmTokens: int = 0
+    llm_name: str = ""
+    llm_start: float = 0
+    llm_end: float = 0
+    llm_success: bool = False
+    llm_tokens: int = 0
 
     # model='qwen3:32b'
     # created_at='2025-10-05T08:10:20.541990235Z' 
@@ -78,25 +85,35 @@ NO_LOG_KEY = "no_log_issues"
 NOT_ANALYZED_KEY = "not_to_analyze_issues"
 NOT_IN_T3000_KEY = "not_in_t3000_issues"
 
-def get_core_data(key: str) -> Optional[models.CoreData]:
-    """Fetches core data for a given key from the database."""
+def get_core_data(key: str) -> Optional[CoreData]:
+    """Fetches core data for a given key and returns it as a Pydantic model."""
     db = database.get_db_session()
-    return crud.get_core_data(db, id=key)
+    db_data = crud.get_core_data(db, id=key)
+    if db_data:
+        return CoreData.model_validate(db_data)
+    return None
 
-def save_core_data(db: Session, key: str, data: CoreData) -> models.CoreData:
-    """Saves core data for a given key to the database."""
+def save_core_data(db: Session, key: str, data: CoreData) -> CoreData:
+    """Saves core data for a given key and returns the saved data as a Pydantic model."""
     db = database.get_db_session()
     db_core_data = crud.get_core_data(db, id=key)
+    
+    # Dump the pydantic model to a dict with snake_case keys, suitable for the database model
+    update_data_dict = data.model_dump(exclude_unset=True, by_alias=True)
+
     if db_core_data:
         # Update existing
-        update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
+        for field, value in update_data_dict.items():
             setattr(db_core_data, field, value)
-        return crud.update_core_data(db, core_data=db_core_data)
+        saved_db_data = crud.update_core_data(db, core_data=db_core_data)
     else:
         # Create new
-        new_data = models.CoreData(**data.model_dump())
-        return crud.create_core_data(db, core_data=new_data)
+        # On creation, we can use the full dict
+        create_data_dict = data.model_dump(by_alias=True)
+        new_data = models.CoreData(**create_data_dict)
+        saved_db_data = crud.create_core_data(db, core_data=new_data)
+    
+    return CoreData.model_validate(saved_db_data)
 
 # def save_to_not_analyzed(table, key):
 #     redis_client.lpush(table, key)
@@ -104,14 +121,16 @@ def save_core_data(db: Session, key: str, data: CoreData) -> models.CoreData:
 def get_active_core_data() -> list[models.CoreData]:
     """Retrieves all active tasks from the database."""
     db = database.get_db_session()
-    return crud.get_active_core_data(db)
+    active_data = crud.get_active_core_data(db)
+    return [CoreData.model_validate(item) for item in active_data]
 
 def get_all_core_data() -> list[models.CoreData]:
     """Retrieves all tasks from the database."""
-    db = database.get_db_session()
-    return crud.get_all_core_data(db)
+    all_data = crud.get_all_core_data(db)
+    return [CoreData.model_validate(item) for item in all_data]
 
 def get_core_data_by_date_range(start_ts: float, end_ts: float) -> list[models.CoreData]:
     """Retrieves tasks from the database within a date range."""
     db = database.get_db_session()
-    return crud.get_core_data_by_date_range(db, start_ts=start_ts, end_ts=end_ts)
+    ranged_data = crud.get_core_data_by_date_range(db, start_ts=start_ts, end_ts=end_ts)
+    return [CoreData.model_validate(item) for item in ranged_data]
