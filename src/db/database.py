@@ -4,6 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from contextvars import ContextVar
 from typing import Union
 from src.utils.config import settings as config
+from contextlib import contextmanager
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{config.POSTGRESSQL_USERNAME}:{config.POSTGRESSQL_PASSWORD}@{config.POSTGRESSQL_HOST}/naispilot"
 
@@ -31,6 +32,7 @@ def get_db():
     finally:
         db.close()
 
+@contextmanager
 def standalone_session():
     """
     Provide a transactional scope around a series of operations for standalone scripts.

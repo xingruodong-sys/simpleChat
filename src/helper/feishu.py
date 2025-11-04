@@ -21,8 +21,7 @@ def gen_sign(secret):
 
     return sign
 
-def send_message(message, url, secret, notify=False, title=""):
-    jiraConfig = settings.get_jira_settings()
+def send_message(message, url, username, password, secret, notify=False, title=""):
     timestamp = int(datetime.now().timestamp())
     sign = gen_sign(secret)
     if not notify:
@@ -72,7 +71,7 @@ def send_message(message, url, secret, notify=False, title=""):
         }
     
     proxies = {
-        'https': f'http://{jiraConfig.username}:{jiraConfig.password}@proxy.neusoft.com:8080/'
+        'https': f'http://{username}:{password}@proxy.neusoft.com:8080/'
     }
     resp = requests.post(url, json=params, proxies=proxies)
     resp.raise_for_status()

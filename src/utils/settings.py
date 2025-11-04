@@ -3,6 +3,7 @@ import json
 from pydantic import BaseModel, HttpUrl
 from typing import List, Optional
 from src.db import database, crud
+from sqlalchemy.orm import Session
 
 # ======================================================================================
 # DATA MODELS
@@ -53,69 +54,71 @@ class SambaSettings(BaseModel):
 # ======================================================================================
 
 # --- Generic Setting Get/Set --- 
-def get_setting(category: str, key: str, default_value = None):
-    db = database.get_db_session()
+def get_setting(category: str, key: str, default_value = None, db: Session = None):
+    if db is None:
+        db = database.get_db_session()
     kv_pair = crud.get_key_value(db, category=category, key=key)
     return kv_pair.value if kv_pair else default_value
 
-def set_setting(category: str, key: str, value):
-    db = database.get_db_session()
+def set_setting(category: str, key: str, value, db: Session = None):
+    if db is None:
+        db = database.get_db_session()
     crud.set_key_value(db, category=category, key=key, value=value)
 
 # --- Jira Modules ---
-def get_jira_modules() -> List[JiraModule]:
-    modules_json = get_setting("settings", "jira-modules")
+def get_jira_modules(db: Session = None) -> List[JiraModule]:
+    modules_json = get_setting("settings", "jira-modules", db=db)
     if modules_json:
         return [JiraModule.parse_raw(m) for m in json.loads(modules_json)]
     return []
 
-def save_jira_modules(modules: List[JiraModule]):
+def save_jira_modules(modules: List[JiraModule], db: Session = None):
     modules_str = json.dumps([m.json() for m in modules])
-    set_setting("settings", "jira-modules", modules_str)
+    set_setting("settings", "jira-modules", modules_str, db=db)
 
 # --- LLM Monitoring ---
-def get_llm_monitoring_settings() -> LlmMonitoringSettings:
-    settings_json = get_setting("settings", "llm-monitoring")
+def get_llm_monitoring_settings(db: Session = None) -> LlmMonitoringSettings:
+    settings_json = get_setting("settings", "llm-monitoring", db=db)
     return LlmMonitoringSettings.parse_raw(settings_json) if settings_json else LlmMonitoringSettings()
 
-def save_llm_monitoring_settings(settings: LlmMonitoringSettings):
-    set_setting("settings", "llm-monitoring", settings.json())
+def save_llm_monitoring_settings(settings: LlmMonitoringSettings, db: Session = None):
+    set_setting("settings", "llm-monitoring", settings.json(), db=db)
 
 # --- Bert Settings ---
-def get_bert_settings() -> BertSettings:
-    settings_json = get_setting("settings", "bert")
+def get_bert_settings(db: Session = None) -> BertSettings:
+    settings_json = get_setting("settings", "bert", db=db)
     return BertSettings.parse_raw(settings_json) if settings_json else BertSettings()
 
-def save_bert_settings(settings: BertSettings):
-    set_setting("settings", "bert", settings.json())
+def save_bert_settings(settings: BertSettings, db: Session = None):
+    set_setting("settings", "bert", settings.json(), db=db)
 
 # --- Jira Settings ---
-def get_jira_settings() -> JiraSettings:
-    settings_json = get_setting("settings", "jira")
+def get_jira_settings(db: Session = None) -> JiraSettings:
+    settings_json = get_setting("settings", "jira", db=db)
     return JiraSettings.parse_raw(settings_json) if settings_json else JiraSettings()
 
-def save_jira_settings(settings: JiraSettings):
-    set_setting("settings", "jira", settings.json())
+def save_jira_settings(settings: JiraSettings, db: Session = None):
+    set_setting("settings", "jira", settings.json(), db=db)
 
 # --- Ollama Settings ---
-def get_ollama_settings() -> OllamaSettings:
-    settings_json = get_setting("settings", "ollama")
+def get_ollama_settings(db: Session = None) -> OllamaSettings:
+    settings_json = get_setting("settings", "ollama", db=db)
     return OllamaSettings.parse_raw(settings_json) if settings_json else OllamaSettings()
 
-def save_ollama_settings(settings: OllamaSettings):
-    set_setting("settings", "ollama", settings.json())
+def save_ollama_settings(settings: OllamaSettings, db: Session = None):
+    set_setting("settings", "ollama", settings.json(), db=db)
 
 # --- Samba Settings ---
-def get_samba_settings() -> List[SambaSettings]:
-    settings_json = get_setting("settings", "samba")
+def get_samba_settings(db: Session = None) -> List[SambaSettings]:
+    settings_json = get_setting("settings", "samba", db=db)
     if settings_json:
         list_of_json_strings = json.loads(settings_json)
         return [SambaSettings.parse_raw(s) for s in list_of_json_strings]
     return []
 
-def save_samba_settings(settings: List[SambaSettings]):
+def save_samba_settings(settings: List[SambaSettings], db: Session = None):
     settings_json = json.dumps([s.json() for s in settings])
-    set_setting("settings", "samba", settings_json)
+    set_setting("settings", "samba", settings_json, db=db)
 
 # --- Ollama Models Utility ---
 def get_ollama_models() -> List[str]:

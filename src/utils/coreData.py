@@ -1,9 +1,7 @@
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_snake
+from pydantic import BaseModel
 from enum import Enum
-from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict
 from src.db import crud, models, database
+from sqlalchemy.orm import Session
 # ======================================================================================
 # Enum 
 # ======================================================================================
@@ -37,12 +35,6 @@ class Status(Enum):
 # ======================================================================================
 
 class CoreData(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_snake,
-        from_attributes=True,
-        populate_by_name=True,
-    )
-
     id: str = ""
     created_at: float = 0
     status: int = 0
@@ -65,6 +57,9 @@ class CoreData(BaseModel):
     llm_success: bool = False
     llm_tokens: int = 0
 
+    class Config:
+        from_attributes = True
+
     # model='qwen3:32b'
     # created_at='2025-10-05T08:10:20.541990235Z' 
     # done=True 
@@ -85,21 +80,21 @@ NO_LOG_KEY = "no_log_issues"
 NOT_ANALYZED_KEY = "not_to_analyze_issues"
 NOT_IN_T3000_KEY = "not_in_t3000_issues"
 
-def get_core_data(key: str) -> Optional[CoreData]:
+def get_core_data(key: str) -> CoreData:
     """Fetches core data for a given key and returns it as a Pydantic model."""
     db = database.get_db_session()
     db_data = crud.get_core_data(db, id=key)
     if db_data:
         return CoreData.model_validate(db_data)
-    return None
+    return CoreData()
 
-def save_core_data(db: Session, key: str, data: CoreData) -> CoreData:
+def save_core_data(key: str, data: CoreData) -> CoreData:
     """Saves core data for a given key and returns the saved data as a Pydantic model."""
     db = database.get_db_session()
     db_core_data = crud.get_core_data(db, id=key)
     
-    # Dump the pydantic model to a dict with snake_case keys, suitable for the database model
-    update_data_dict = data.model_dump(exclude_unset=True, by_alias=True)
+    # Pydantic V2 uses model_dump, ensure your Pydantic version is up to date
+    update_data_dict = data.model_dump(exclude_unset=True, by_alias=False)
 
     if db_core_data:
         # Update existing
@@ -108,9 +103,7 @@ def save_core_data(db: Session, key: str, data: CoreData) -> CoreData:
         saved_db_data = crud.update_core_data(db, core_data=db_core_data)
     else:
         # Create new
-        # On creation, we can use the full dict
-        create_data_dict = data.model_dump(by_alias=True)
-        new_data = models.CoreData(**create_data_dict)
+        new_data = models.CoreData(**update_data_dict)
         saved_db_data = crud.create_core_data(db, core_data=new_data)
     
     return CoreData.model_validate(saved_db_data)
@@ -118,19 +111,17 @@ def save_core_data(db: Session, key: str, data: CoreData) -> CoreData:
 # def save_to_not_analyzed(table, key):
 #     redis_client.lpush(table, key)
 
-def get_active_core_data() -> list[models.CoreData]:
-    """Retrieves all active tasks from the database."""
-    db = database.get_db_session()
-    active_data = crud.get_active_core_data(db)
-    return [CoreData.model_validate(item) for item in active_data]
+def get_active_core_data(db: Session = None) -> list[models.CoreData]:
+    if db is None:
+        db = database.get_db_session()
+    return crud.get_active_core_data(db)
 
-def get_all_core_data() -> list[models.CoreData]:
-    """Retrieves all tasks from the database."""
-    all_data = crud.get_all_core_data(db)
-    return [CoreData.model_validate(item) for item in all_data]
+def get_all_core_data(db: Session = None) -> list[models.CoreData]:
+    if db is None:
+        db = database.get_db_session()
+    return crud.get_all_core_data(db)
 
-def get_core_data_by_date_range(start_ts: float, end_ts: float) -> list[models.CoreData]:
-    """Retrieves tasks from the database within a date range."""
-    db = database.get_db_session()
-    ranged_data = crud.get_core_data_by_date_range(db, start_ts=start_ts, end_ts=end_ts)
-    return [CoreData.model_validate(item) for item in ranged_data]
+def get_core_data_by_date_range(start_ts: float, end_ts: float, db: Session = None) -> list[models.CoreData]:
+    if db is None:
+        db = database.get_db_session()
+    return crud.get_core_data_by_date_range(db, start_ts=start_ts, end_ts=end_ts)

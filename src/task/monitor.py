@@ -4,7 +4,6 @@
 from datetime import datetime, timedelta
 from src.helper import feishu, JiraSy
 from src.utils import settings, findlog, coreData
-from src.db import crud
 from src.db.database import standalone_session
 import asyncio
 import requests
@@ -18,9 +17,8 @@ async def delete_task(monitorSettings: settings.LlmMonitoringSettings):
 # Monitoring Logic
 # ======================================================================================
 
-async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
+async def check_stuck_tasks(setting: settings.LlmMonitoringSettings, jiraConfig: settings.JiraSettings, active_tasks: list[coreData.CoreData]):
     try:
-        jiraConfig = settings.get_jira_settings()
         syJira = JiraSy.JiraImp(jira_server=str(jiraConfig.url), username=jiraConfig.username, password=jiraConfig.password)
         stuck_pending_timeout = timedelta(minutes=setting.pendingTimeout)
         stuck_bert_timeout = timedelta(minutes=setting.bertTimeout)
@@ -32,8 +30,6 @@ async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
         forwardUrl = str(setting.forwardUrl)
         proxyName = setting.proxyName
         proxyPasswd = setting.proxyPasswd
-
-        active_tasks = crud.get_active_core_data()
 
         if not active_tasks:
             return
@@ -49,9 +45,14 @@ async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
 
             # 1. Check for tasks stuck in PENDING status
             if task.status == coreData.Status.PENDING.value and datetime.fromtimestamp(task.created_at) < datetime.now() - stuck_pending_timeout:
+                text = """检测到本件任务长时间未上传日志，系统已自动将任务退回至“待重现”状态，请确认是否正常处理。日志字段规则如下：
+'-'  表示等待日志上传
+'null' 表示无日志
+'有效路径' 表示已上传日志
+                """
                 pendingList.append(task.id)
                 reporter = syJira.getReporter(task.id)
-                syJira.addComment(task.id, "检查到Link to attachments字段还没有有效日志路径，请确认是否漏传。")
+                syJira.addComment(task.id, text)
                 syJira.transitionsIssue(task.id, "To Repro")
                 syJira.assigneeIssue(task.id, reporter)
 
@@ -92,13 +93,13 @@ async def check_stuck_tasks(setting: settings.LlmMonitoringSettings):
             MCP分析任务数：{len(toolList)}
             """
             build_feishu_message(message, url, secret, notify=False, title="Jira monitor",forwardUrl=forwardUrl, name=proxyName, passwd=proxyPasswd)
-    finally:
-        db.close()
+    except Exception as e:
+        print(f"An error occurred in check_stuck_tasks: {e}")
 
 def build_feishu_message(message, url, secret, notify=False, title="Jira monitor", forwardUrl="", name="", passwd=""):
     try:
         if not forwardUrl:
-            feishu.send_message(message, url, secret, notify=notify, title=title)
+            feishu.send_message(message, url, name, passwd, secret, notify=notify, title=title)
         else:
             data = {
                 "secret": secret,
@@ -111,7 +112,6 @@ def build_feishu_message(message, url, secret, notify=False, title="Jira monitor
             }
             response = requests.post(forwardUrl, json=data)
             response.raise_for_status()
-            print(response.status_code)
     except Exception as e:
         print(f"send feishu error {str(e)}")
             
@@ -127,11 +127,13 @@ async def check_stuck_tasks_main():
         cycle_seconds = 60
         try:
             with standalone_session() as db:
-                setting = settings.get_llm_monitoring_settings()
+                setting = settings.get_llm_monitoring_settings(db=db)
+                jiraConfig = settings.get_jira_settings(db=db)
+                active_tasks = coreData.get_active_core_data(db=db)
                 if setting and setting.monitoringCycle:
                     cycle_seconds = setting.monitoringCycle * 60
-                check_stuck_tasks(setting)
-                delete_task(setting)
+                await check_stuck_tasks(setting, jiraConfig, active_tasks)
+                await delete_task(setting)
 
         except Exception as e:
             print(f"ERROR: An exception occurred during the monitoring cycle: {e}")
