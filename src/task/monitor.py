@@ -120,7 +120,7 @@ def build_feishu_message(message, url, secret, notify=False, title="Jira monitor
 # Main Loop
 # ======================================================================================
 
-async def check_stuck_tasks_main():
+async def main():
     """Main function to run the monitoring loop."""
     print("Starting the monitoring service...")
     while True:

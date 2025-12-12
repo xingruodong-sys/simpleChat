@@ -64,7 +64,7 @@ def read_cpp_files(directory):
                 except Exception as e:
                     print(f"读取文件 {file_path} 时出错: {e}")
 
-if __name__ == "__main__":
+def main():
     path = '/home/lix/Code/Gitlab/earth/nmasdk-bl/mgr/bl/src/map'
     if os.path.isdir(path):
         read_cpp_files(path)

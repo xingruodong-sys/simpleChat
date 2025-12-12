@@ -1,7 +1,8 @@
-
 import streamlit as st
 import requests
 from uuid import uuid4
+import os
+
 
 # ======================================================================================
 # GENERAL API AND CONFIGURATION
@@ -32,6 +33,15 @@ if 'jira_modules' not in st.session_state:
     st.session_state.jira_modules = []
 if 'samba_settings' not in st.session_state:
     st.session_state.samba_settings = {}
+
+def format_bytes(size):
+    """Formats file size in bytes to a human-readable string (B, KB, MB)."""
+    if size < 1024:
+        return f"{size} B"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.2f} KB"
+    else:
+        return f"{size / (1024 * 1024):.2f} MB"
 
 # ======================================================================================
 # TABS DEFINITION
@@ -488,7 +498,9 @@ with tab_system:
     if st.button("Restart Backend Server", type="primary"):
         with st.spinner("Sending restart command..."):
             try:
-                response = requests.post(f"{get_api_url()}/system/restart")
+                # The restart URL is now /system/restart, without the /api prefix.
+                base_url = get_api_url().replace("/api", "")
+                response = requests.post(f"{base_url}/system/restart")
                 if response.status_code == 200:
                     st.success("Restart command sent successfully! The server may be temporarily unavailable.")
                 else:
@@ -496,3 +508,39 @@ with tab_system:
             except requests.exceptions.RequestException as e:
                 st.error(f"Failed to connect to the backend: {e}")
     st.info("Please note: The Streamlit frontend does not automatically reload after a backend restart.")
+    
+    st.divider()
+
+    st.subheader("System Log Download")
+    LOG_DIR = "./Log"
+
+    if not os.path.exists(LOG_DIR) or not os.path.isdir(LOG_DIR):
+        st.warning(f"Log directory '{LOG_DIR}' not found.")
+    else:
+        log_files = [f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f))]
+        
+        if not log_files:
+            st.info(f"No log files found in '{LOG_DIR}'.")
+        else:
+            st.write("Click to download a system log file:")
+            
+            # Create a header for the file list
+            col1, col2, col3 = st.columns([3, 1, 1])
+            col1.write("**File Name**")
+            col2.write("**Size**")
+            
+            # List each file with its size and a download button
+            for filename in sorted(log_files):
+                file_path = os.path.join(LOG_DIR, filename)
+                try:
+                    file_size = os.path.getsize(file_path)
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    col1.text(filename)
+                    col2.text(format_bytes(file_size))
+                    # Construct the full URL for the download link, removing the /api part
+                    base_url = get_api_url().replace("/api", "")
+                    download_url = f"{base_url}/system/logs/{filename}"
+                    col3.link_button("Download", url=download_url, use_container_width=True)
+                except OSError as e:
+                    st.error(f"Error accessing file {filename}: {e}")
+
