@@ -1,21 +1,24 @@
 import chromadb
 from chromadb.utils import embedding_functions
 import os
-from helper import JiraSy
+from src.helper import JiraSy
 from src.helper.Redis import *
 import time
 import re
 
 
-host = os.getenv('CHROMA_DB_HOST', '10.10.90.4')
+host = os.getenv('CHROMA_DB_HOST', '10.10.90.178')
 port = os.getenv('CHROMA_DB_PORT', 8000)
 embed_model = os.getenv('EMBEDDINGS_MODEL_NAME', 'bge-m3:latest')
-base_model = os.getenv('BASE_MODEL_HOST', 'http://10.146.12.2:11434')
+# 10.146.37.2:11434/api/chat
+base_model = os.getenv('BASE_MODEL_HOST', 'http://10.146.37.2:11434/')
 
 openai_ef = embedding_functions.OllamaEmbeddingFunction(
     url=base_model,
     model_name=embed_model
 )
+
+jira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ1qaz")
 
 class ChromaDBImpl:
     collection = None
@@ -69,7 +72,7 @@ def add_job(impl):
     try:
         for i in range(63614, 50000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = JiraSy.getIssueContentExt(issue_key)
+            content = jira.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -102,7 +105,7 @@ def add_job_no_comments(impl):
     try:
         for i in range(65000, 55000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = JiraSy.getIssueContentExt(issue_key)
+            content = jira.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -127,7 +130,7 @@ def add_job_no_comments_strip(impl):
     try:
         for i in range(65000, 50000, -1):
             issue_key = "NMASDK-" + str(i)
-            content = JiraSy.getIssueContentExt(issue_key)
+            content = jira.getIssueContentExt(issue_key)
             if content['type'] != 'Product bug':
                 continue
             
@@ -150,7 +153,7 @@ def add_job_no_comments_strip(impl):
         print(f"Error: {e}")
 
 def do_query(impl, key, strip=False):
-    content1 = JiraSy.getIssueContentExt(key)
+    content1 = jira.getIssueContentExt(key)
     source = 'summary:' + content1['summary'] + '\n description:' + content1['description']
     res = impl.query(source)
     ids = res['ids']
@@ -159,14 +162,14 @@ def do_query(impl, key, strip=False):
     result = ''
     for issues in ids:
         for issue in issues:
-            content = JiraSy.getIssueContentExt(issue)
+            content = jira.getIssueContentExt(issue)
             result = 'issue id : ' + issue + '\n' + 'summary:' + content['summary'] + '\n description:' + content['description'] + '\n comments: '
             for comment in content['comments']:
                 result = result + f'comment by {comment['name']}:{comment['body']}' + '\n'
     return result, ids, dis
 
 def do_query_strip(impl, key):
-    content1 = JiraSy.getIssueContentExt(key)
+    content1 = jira.getIssueContentExt(key)
     if content1['type'] != 'Product bug':
         return [], [], [], [], False
     source = 'summary:' + remove_brackets_and_content(content1['summary']) + '\n description:' + str(content1['description'])

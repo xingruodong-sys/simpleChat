@@ -9,6 +9,8 @@ from src.utils import settings
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+class SMBExceptionSize(Exception): pass
+
 class SMBConnectionManager:
     def __init__(self, server: str, username: str, password: str):
         self.server = server
@@ -46,8 +48,9 @@ class SMBFileSyncer:
         share_name: str,
         remote_base_path: str,
         local_base_path: str,
+        db,
     ) -> bool:
-        setting = settings.get_samba_settings()
+        setting = settings.get_samba_settings(db)
         matched = next((s for s in setting if s.address in server_ip), None)
         if not matched:
             Log.warning(f"未知 SMB 服务器: {server_ip}")
@@ -57,28 +60,28 @@ class SMBFileSyncer:
         meta_file = local_dir / "file_meta.json"
         existing_meta = self._load_existing_meta(meta_file)
 
-        try:
-            with SMBConnectionManager(matched.address, matched.username, matched.password) as conn:
-                remote_files = self._collect_remote_files(conn, share_name, remote_base_path)
+        with SMBConnectionManager(matched.address, matched.username, matched.password) as conn:
+            remote_files = self._collect_remote_files(conn, share_name, remote_base_path)
+            file_size_total = 0
+            for file in remote_files.keys():
+                file_size_total += remote_files[file]
+            if file_size_total > 10 * 1024 * 1024 * 1024 and len(remote_files.keys()):
+                raise SMBExceptionSize(f"文件过大({file_size_total/1024/1024/1024}G)或文件过多({len(remote_files.keys())}个)，请确认日志路径是否正确")
 
-                if self._needs_sync(existing_meta, remote_files):
-                    Log.info("检测到文件变更（路径或大小不同），开始同步...")
-                    loop = asyncio.get_event_loop()
-                    with ThreadPoolExecutor() as executor:
-                        response = await loop.run_in_executor(
-                                        executor, 
-                                        lambda: self._download_files(conn, share_name, remote_base_path, local_dir)
-                        )
-                    self._save_meta(meta_file, remote_files)
-                    Log.info("同步完成")
-                    return True
-                else:
-                    Log.info("文件列表和大小一致，无需同步")
-                    return False
-
-        except Exception as e:
-            Log.error(f"SMB 同步失败: {e}")
-            return False
+            if self._needs_sync(existing_meta, remote_files):
+                Log.info("检测到文件变更（路径或大小不同），开始同步...")
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor() as executor:
+                    response = await loop.run_in_executor(
+                                    executor, 
+                                    lambda: self._download_files(conn, share_name, remote_base_path, local_dir)
+                    )
+                self._save_meta(meta_file, remote_files)
+                Log.info("同步完成")
+                return True
+            else:
+                Log.info("文件列表和大小一致，无需同步")
+                return False
 
     def _collect_remote_files(
         self, conn: SMBConnection, share: str, remote_path: str
@@ -100,7 +103,7 @@ class SMBFileSyncer:
                     else:
                         files[rel_path] = item.file_size
             except Exception as e:
-                Log.error(f"遍历远程目录失败 {current_remote}: {e}")
+                raise SMBExceptionSize(str(e))
 
         _walk(remote_path)
         return files
@@ -156,5 +159,5 @@ class SMBFileSyncer:
 
 
 _syncer = SMBFileSyncer()
-async def copy_file_via_smb(server_ip: str, share_name: str, remote_base_path: str, local_base_path: str) -> bool:
-    return await _syncer.sync(server_ip, share_name, remote_base_path, local_base_path)
+async def copy_file_via_smb(server_ip: str, share_name: str, remote_base_path: str, local_base_path: str, db) -> bool:
+    return await _syncer.sync(server_ip, share_name, remote_base_path, local_base_path, db)

@@ -1,8 +1,8 @@
+
 import streamlit as st
 import requests
 from uuid import uuid4
 import os
-
 
 # ======================================================================================
 # GENERAL API AND CONFIGURATION
@@ -33,15 +33,6 @@ if 'jira_modules' not in st.session_state:
     st.session_state.jira_modules = []
 if 'samba_settings' not in st.session_state:
     st.session_state.samba_settings = {}
-
-def format_bytes(size):
-    """Formats file size in bytes to a human-readable string (B, KB, MB)."""
-    if size < 1024:
-        return f"{size} B"
-    elif size < 1024 * 1024:
-        return f"{size / 1024:.2f} KB"
-    else:
-        return f"{size / (1024 * 1024):.2f} MB"
 
 # ======================================================================================
 # TABS DEFINITION
@@ -498,9 +489,7 @@ with tab_system:
     if st.button("Restart Backend Server", type="primary"):
         with st.spinner("Sending restart command..."):
             try:
-                # The restart URL is now /system/restart, without the /api prefix.
-                base_url = get_api_url().replace("/api", "")
-                response = requests.post(f"{base_url}/system/restart")
+                response = requests.post(f"{get_api_url()}/system/restart")
                 if response.status_code == 200:
                     st.success("Restart command sent successfully! The server may be temporarily unavailable.")
                 else:
@@ -508,8 +497,17 @@ with tab_system:
             except requests.exceptions.RequestException as e:
                 st.error(f"Failed to connect to the backend: {e}")
     st.info("Please note: The Streamlit frontend does not automatically reload after a backend restart.")
-    
+
     st.divider()
+
+    def format_bytes(size):
+        """Formats file size in bytes to a human-readable string (B, KB, MB)."""
+        if size < 1024:
+            return f"{size} B"
+        elif size < 1024 * 1024:
+            return f"{size / 1024:.2f} KB"
+        else:
+            return f"{size / (1024 * 1024):.2f} MB"
 
     st.subheader("System Log Download")
     LOG_DIR = "./Log"
@@ -537,10 +535,8 @@ with tab_system:
                     col1, col2, col3 = st.columns([3, 1, 1])
                     col1.text(filename)
                     col2.text(format_bytes(file_size))
-                    # Construct the full URL for the download link, removing the /api part
-                    base_url = get_api_url().replace("/api", "")
-                    download_url = f"{base_url}/system/logs/{filename}"
+                    # Construct the full URL for the download link
+                    download_url = f"{get_api_url()}/system/logs/{filename}"
                     col3.link_button("Download", url=download_url, use_container_width=True)
                 except OSError as e:
                     st.error(f"Error accessing file {filename}: {e}")
-

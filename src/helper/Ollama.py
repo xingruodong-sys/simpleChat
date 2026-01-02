@@ -4,8 +4,7 @@ import json
 import numpy as np
 from numpy.linalg import norm
 import json
-from src.utils import coreData, settings
-import time
+from src.utils import settings
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -72,9 +71,15 @@ def find_most_similar(needle, haystack):
     ]
     return sorted(zip(similarity_scores, range(len(haystack))), reverse=True)
 
-def get_modes():
+def get_modes(db):
+    from src.db.database import DatabaseManager
     try:
-        setting = settings.get_ollama_settings()
+        if db is None:
+            db_mgr = DatabaseManager()
+            with db_mgr.standalone_session() as db:
+                setting = settings.get_ollama_settings(db)
+        else:
+            setting = settings.get_ollama_settings(db)
         timeout = setting.timeout
         client = ollama.Client(host=str(setting.url), timeout=timeout)
         data = client.list()
@@ -124,9 +129,8 @@ def chat(system_prompt:str, prompt:str, modelname:str, data:str, key:str, think:
     # Log.info(response)
     return response["message"]["content"]
 
-async def chat_with_tools(issue_key, prompt:str, modelname:str, tools = None, function = None, think:bool = False):
-    core_data = coreData.get_core_data(issue_key)
-    setting = settings.get_ollama_settings()
+async def chat_with_tools(prompt:str, modelname:str, db, tools = None, think:bool = False):
+    setting = settings.get_ollama_settings(db)
     timeout = setting.timeout
     client = ollama.Client(host=str(setting.url), timeout=timeout)
 
@@ -160,9 +164,6 @@ async def chat_with_tools(issue_key, prompt:str, modelname:str, tools = None, fu
             },
         ]
 
-        core_data.status = coreData.Status.WATING_LLM.code
-        core_data.llmStart = time.time()
-        coreData.save_core_data(issue_key, core_data)
         loop = asyncio.get_event_loop()
         with ThreadPoolExecutor() as executor:
             response = await loop.run_in_executor(
@@ -174,33 +175,8 @@ async def chat_with_tools(issue_key, prompt:str, modelname:str, tools = None, fu
                     think=think
                 )
             )
-        core_data.llmEnd = time.time()
-        core_data.llmName = modelname
-        core_data.llmSuccess = True if response["done"] == "True" else False
-        core_data.llmTokens = response["eval_count"]
-        coreData.save_core_data(issue_key, core_data)
 
-        if response["message"].get('tool_calls'):
-            if function == None:
-                return 'No fucntion call'
-
-            tool_calls = response["message"]['tool_calls']
-            for call in tool_calls:
-                print(call['function'].name)
-                print(call['function'].arguments)
-                core_data.toolName = call['function'].name
-                core_data.analyzeStart = time.time()
-                core_data.status = coreData.Status.WATING_TOOL.code
-                coreData.save_core_data(issue_key, core_data)
-                res = await function(call['function'].name, call['function'].arguments)
-                core_data.analyzeEnd = time.time()
-                coreData.save_core_data(issue_key, core_data)
-            return res
-
-        src = {
-            "Comment":response["message"]["content"]
-        }
-        return json.dumps(src)
+        return response
     except Exception as e:
         src = {
             "Comment":str(e)

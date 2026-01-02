@@ -2,16 +2,16 @@ import argparse
 import importlib
 import sys
 import pkgutil
-import src.task  # 关键：显式导入包本身
+import src.task
+import asyncio
+import inspect
 
 def main():
     parser = argparse.ArgumentParser(description="Run a specific task in src.task")
-    parser.add_argument("-t", "--task", required=True, help="Task name to run (e.g. readCpp)")
+    parser.add_argument("-t", "--task", required=True, help="Task name to run (e.g. monitor)")
     args, unknown = parser.parse_known_args()
 
     task_name = args.task
-
-    # ✅ 从 src.task 包中列出所有模块
     package = src.task
     available_tasks = [name for _, name, is_pkg in pkgutil.iter_modules(package.__path__) if not is_pkg]
 
@@ -23,10 +23,18 @@ def main():
     try:
         module = importlib.import_module(f"{package.__name__}.{task_name}")
         if hasattr(module, "main") and callable(module.main):
-            module.main(unknown)  # 把其他参数传进去
+            main_func = module.main
+            if inspect.iscoroutinefunction(main_func):
+                asyncio.run(main_func(unknown))
+            else:
+                main_func(unknown)
         else:
             print(f"⚠️ Task '{task_name}' does not define a callable 'main()' function.")
             sys.exit(1)
+    except ModuleNotFoundError as e:
+        print(f"⚠️ Missing dependency: {e.name}")
+        print(f"👉 Try installing it with:\n   pip install {e.name}")
+        sys.exit(1)
     except Exception as e:
         print(f"❌ Error running task '{task_name}': {e}")
         sys.exit(1)

@@ -1,5 +1,7 @@
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from src.db.database import get_db
+from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse, HTMLResponse
 from src.utils import settings
 
@@ -7,8 +9,8 @@ from src.utils import settings
 router = APIRouter()
 
 @router.get("/download/{file_path:path}")
-async def download_file(file_path: str):
-    logPath = settings.get_llm_monitoring_settings()
+async def download_file(file_path: str, db: Session = Depends(get_db)):
+    logPath = settings.get_llm_monitoring_settings(db)
     full_path = os.path.join(logPath.analyzedLogPath, file_path)
 
     if not os.path.exists(full_path):

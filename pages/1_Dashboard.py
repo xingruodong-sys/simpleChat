@@ -32,7 +32,7 @@ def format_status(status_code):
     """Maps status code to a descriptive string and emoji."""
     status_map = {
         0: "🆕 New", 1: "⏳ Pending", 2: "🧠 BERT", 3: "🤖 LLM",
-        4: "🛠️ Tool", 5: "↪️ Not Analyzed", 6: "🚫 N/A",
+        4: "🛠️ Tool", 5: "↪️ PREPARING LOG", 6: "🚫 MCP CONNECTING",
         98: "🔥 Exception", 99: "✅ Done"
     }
     return status_map.get(status_code, "❓ Unknown")
@@ -57,7 +57,7 @@ else:
     # --- KPI Metrics ---
     st.header("System Health at a Glance", divider='blue')
     total_tasks = len(df)
-    in_progress_tasks = len(df[df['status'].isin([1, 2, 3, 4])])
+    in_progress_tasks = len(df[df['status'].isin([1, 2, 3, 4, 5, 6])])
     exception_tasks = len(df[df['status'] == 98])
 
     kpi1, kpi2, kpi3 = st.columns(3)
@@ -73,10 +73,6 @@ else:
     df_display['ID'] = df['id']
     df_display['Status'] = df['status'].apply(format_status)
     df_display['Created At'] = pd.to_datetime(df['created_at'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Calculate total processing time
-    end_times = df[['bertEnd', 'llmEnd', 'analyzeEnd']].max(axis=1)
-    df_display['Processing Time'] = (end_times - df['created_at']).apply(format_timedelta)
 
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
@@ -90,12 +86,6 @@ else:
         st.subheader(f"Details for Task: `{task_details['id']}`")
         st.markdown(f"**Status:** {format_status(task_details['status'])}")
 
-        # Timestamps and Durations
-        with st.expander("Processing Timeline", expanded=True):
-            c1, c2, c3 = st.columns(3)
-            c1.metric("BERT Time", format_timedelta(task_details['bertEnd'] - task_details['bertStart']))
-            c2.metric("LLM Time", format_timedelta(task_details['llmEnd'] - task_details['llmStart']))
-            c3.metric("Tool Time", format_timedelta(task_details['analyzeEnd'] - task_details['analyzeStart']))
 
         # Exception Details
         if task_details['status'] == 98 and task_details['exception_string']:
@@ -103,11 +93,5 @@ else:
 
         # AI Module Outputs
         with st.expander("BERT Analysis Output"):
-            st.write(f"Component: `{task_details['bertComponent']}`")
-        
-        with st.expander("LLM Analysis Output"):
-            st.write(f"LLM Name: `{task_details['llmName']}`")
-            st.write(f"Tokens Used: `{task_details['llmTokens']}`")
+            st.write(f"Component: `{task_details['bert_component']}`")
 
-        with st.expander("Tool Analysis Output"):
-            st.write(f"Tool Name: `{task_details['toolName']}`")

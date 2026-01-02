@@ -4,9 +4,9 @@ import time
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from starlette.responses import FileResponse
 
-
 # --- Router Initialization ---
 router = APIRouter(
+    prefix="/system",
     tags=["System"],
 )
 
@@ -18,7 +18,7 @@ def delayed_exit():
 
 # --- API Endpoints ---
 
-@router.post("/system/restart")
+@router.post("/restart")
 async def restart_server(background_tasks: BackgroundTasks):
     """
     Triggers a server restart.
@@ -28,10 +28,9 @@ async def restart_server(background_tasks: BackgroundTasks):
     background_tasks.add_task(delayed_exit)
     return {"message": "Server is restarting..."}
 
-
 LOG_DIR = "./Log"
 
-@router.get("/system/logs/{filename}", summary="Download a system log file")
+@router.get("/logs/{filename}", summary="Download a system log file")
 async def download_log_file(filename: str):
     """
     Downloads a system log file.

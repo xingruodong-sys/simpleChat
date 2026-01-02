@@ -10,8 +10,7 @@ temp_logcat_files = 'temp_logcat_files'
 dlt_file_path = 'dlt_files'
 logcat_file_path = 'logcat_files'
 crash_file_path = 'crash_files'
-
-url = "http://10.10.90.15:8001/download/"
+anr_file_path = 'anr_files'
 
 # 复制目录内容到临时目录，临时目录在目录中需要忽略
 def copy_directory(src, dst):
@@ -47,6 +46,20 @@ LOGCAT_PATTERN = re.compile(
 def is_crash_file(file_path):
     if 'crash' in file_path.name.lower():
         return True
+    if 'dropbox' in file_path.name.lower():
+        return True
+    if 'tombstone' in file_path.name.lower():
+        return True
+    return False
+
+def is_anr_file(path: str) -> bool:
+    if not path or not os.path.isfile(path):
+        return False
+
+    filename = os.path.basename(path).lower()
+    if "anr" in filename:
+        return True
+    
     return False
 
 def is_logcat_file(file_path, lines_to_check=20):
@@ -80,6 +93,7 @@ def log_files(root):
     logcat_files = []
     dlt_files = []
     crash_files = []
+    anr_files = []
     root_dir = Path(root).resolve()
     
     if not root_dir.exists():
@@ -87,7 +101,7 @@ def log_files(root):
 
     for dirpath, _, filenames in os.walk(root_dir / temp_logcat_files):
         for filename in filenames:
-            if filename in logcat_files or filename in dlt_files or filename in crash_files:
+            if filename in logcat_files or filename in dlt_files or filename in crash_files or filename in anr_files:
                 continue
             file_path = os.path.join(dirpath, filename)
             if is_dlt_file(Path(file_path)):
@@ -108,7 +122,13 @@ def log_files(root):
                 if not crash_files_path.exists():
                     crash_files_path.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(file_path, crash_files_path / filename)
-    return logcat_files, dlt_files, crash_files
+            elif is_anr_file(Path(file_path)):
+                anr_files.append(filename)
+                anr_files_path = Path(root_dir).resolve() / anr_file_path
+                if not anr_files_path.exists():
+                    anr_files_path.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(file_path, anr_files_path / filename)
+    return logcat_files, dlt_files, crash_files, anr_files
 
 def find_logcat_files(root, isDownload):
     root_path = Path(root).resolve()
@@ -121,6 +141,7 @@ def find_logcat_files(root, isDownload):
         logcat_files = []
         dlt_files = []
         crash_files = []
+        anr_files = []
         root_dir = Path(root).resolve()
         if not root_dir.exists():
             raise FileNotFoundError(f"指定的路径不存在: {root_dir}")
@@ -136,7 +157,11 @@ def find_logcat_files(root, isDownload):
         for dirpath, _, filenames in os.walk(crash_dir):
             for filename in filenames:
                 crash_files.append(filename)
-        return logcat_files, dlt_files, crash_files
+        anr_dir = root_path / anr_file_path
+        for dirpath, _, filenames in os.walk(anr_dir):
+            for filename in filenames:
+                anr_files.append(filename)
+        return logcat_files, dlt_files, crash_files, anr_files
 
     # 将root_path下的所有文件和子目录拷贝到一个临时目录
     temp_dir = root_path / temp_logcat_files
@@ -339,14 +364,16 @@ def process_compressed_files(directory_path):
                 except Exception as e:
                     logger.debug(f"Error processing {file_path}: {str(e)}")
 
-def delete_oldest_folder(path, number=150):
+def delete_oldest_folder(path, max_number=150):
     try:
         folders = [os.path.join(path, d) for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
         folders.sort(key=lambda x: os.path.getctime(x))
-        while len(folders) > number:
-            oldest_folder = folders.pop(0)
-            logger.debug(f"Deleting oldest folder: {oldest_folder}")
-            rm(oldest_folder)
+        if len(folders) > max_number:
+            keep_number = max_number // 2
+            to_delete = folders[:len(folders) - keep_number]
+            for folder in to_delete:
+                logger.debug(f"Deleting oldest folder: {folder}")
+                rm(folder)
     except Exception as e:
         logger.debug(f"Error deleting oldest folder: {str(e)}")
 

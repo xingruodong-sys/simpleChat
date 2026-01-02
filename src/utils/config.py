@@ -11,9 +11,14 @@ class Settings(BaseSettings):
     JIRA_TIMEOUT: int = 3
     JIRA_MAX_RETRIES: int = 2
 
-    JIRA_VERSION: int = 2
-    JIRA_CUSTOM_FIELD_LINK_TO_PATH: str = ""
-    JIRA_CUSTOM_FIELD_PRODUCT_VERSION: str = ""
-    JIRA_CUSTOM_FIELD_REQ_BY_CUSTOMER:str = ""
+    JIRA_CUSTOM_FIELD_LINK_TO_PATH: str = "customfield_12010"
+    JIRA_CUSTOM_FIELD_PRODUCT_VERSION: str = "customfield_12051"
+    JIRA_CUSTOM_FIELD_REQ_BY_CUSTOMER:str = "customfield_10191"
+    JIRA_CUSTOM_FIELD_FUNCTION_OWNER: str = "customfield_14311"
+
+    POSTGRESSQL_USERNAME: str = "postgres"
+    POSTGRESSQL_PASSWORD: str = "neuadminpostgreroot"
+    POSTGRESSQL_HOST: str = ""
+    POSTGRESSQL_PORT: str = ""
 
 settings = Settings()
