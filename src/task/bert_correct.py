@@ -7,13 +7,13 @@ from src.utils.coreData import get_core_data_for_bert_correct, save_core_data_ma
 from routers.webhooks import getComponentReal
 from src.helper import JiraSy
 from src.db.database import DatabaseManager
-from src.helper import Redis
+from src.helper.Redis import *
 from datetime import datetime
 from src.task.team import team
 import json
-import requests
 import csv
 import os
+import time
 from src.task.effective_ip import llm_is_an
 
 jira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ1qaz")
@@ -25,96 +25,67 @@ def first_member_analyze():
         datas = get_core_data_for_bert_correct(db)
         if not datas:
             return None
-        results = []
-        filename = "output.csv"
-        file_exists = os.path.isfile(filename)
-        with open(filename, mode='a', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=["id", "bert component", "analyze component", "correct"])
-            
-            if not file_exists:
-                writer.writeheader()  # 只在首次写入时加表头
 
-            filename2 = "output2.csv"
-            file_exists2 = os.path.isfile(filename2)
-            with open(filename2, mode='a', encoding='utf-8', newline='') as f:
-                writer2 = csv.DictWriter(f, fieldnames=["id", "bert component", "current component", "correct"])
-                
-                if not file_exists2:
-                    writer2.writeheader()  # 只在首次写入时加表头
-                for data in datas:
-                    if not data.bert_component:
-                        continue
-                    value = jira.getIssueHistory(data.id)
-                    if not value:
-                        continue
-                    comments = value.get('comments')
-                    comments.sort(key=lambda x:x[2])
-                    an_start = 0
-                    for comment in comments:
-                        if 'Naiser-T3000' != comment[0]:
-                            if '日志说明' in comment[1]:
-                                an_start = comment[2]
+        for data in datas:
+            if not data.bert_component:
+                continue
+            value = jira.getIssueHistory(data.id)
+            if not value:
+                continue
+            comments = value.get('comments')
+            comments.sort(key=lambda x:x[2])
+            an_start = 0
+            for comment in comments:
+                if 'Naiser-T3000' != comment[0]:
+                    if '日志说明' in comment[1]:
+                        an_start = comment[2]
+                        break
+            bert_correct = True
+            if an_start != 0:
+                component = "NO CHANGE"
+                changes = value.get('changes')
+                for change in changes:
+                    author = change.get('author')
+                    field = change.get('field')
+                    if author != 'Naiser-T3000' and field == 'Component':
+                        date =change.get('date')
+                        if time_cmp(an_start, date):
+                            component = change.get('to_value')
+                            bert_correct = False
+                            break
+                dictObj = {
+                    "id": data.id,
+                    "bert component": data.bert_component,
+                    "analyze component": component,
+                    "correct": bert_correct
+                }
+                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
+            else:
+                changes = value.get('changes')
+                component = ""
+                for change in changes:
+                    author = change.get('author')
+                    field = change.get('field')
+                    if field == 'status':
+                        status = change.get('to_value')
+                        if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
+                            if component != getComponentReal(data.bert_component) and component != '':
+                                bert_correct = False
                                 break
-                    bert_correct = True
-                    if an_start != 0:
-                        component = "NO CHANGE"
-                        changes = value.get('changes')
-                        for change in changes:
-                            author = change.get('author')
-                            field = change.get('field')
-                            if author != 'Naiser-T3000' and field == 'Component':
-                                date =change.get('date')
-                                if time_cmp(an_start, date):
-                                    component = change.get('to_value')
-                                    bert_correct = False
-                                    break
-                        results.append({
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "analyze component": component,
-                            "correct": bert_correct
-                        })
-                        row = {
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "analyze component": component,
-                            "correct": bert_correct
-                        }
-                        writer.writerow(row)
-
-                    else:
-                        changes = value.get('changes')
-                        component = ""
-                        for change in changes:
-                            author = change.get('author')
-                            field = change.get('field')
-                            if field == 'status':
-                                status = change.get('to_value')
-                                if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
-                                    if component != getComponentReal(data.bert_component) and component != '':
-                                        bert_correct = False
-                                        break
-                            
-                            if field == 'Component':
-                                if change.get('to_value') != 'None':
-                                    component = change.get('to_value')
-                        
-                                # data.bert_correct = 1
-                                # save_core_data_main(data.id, data)
-                        results.append({
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "current component": component,
-                            "correct": bert_correct
-                        })
-                        row2 = {
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "current component": component,
-                            "correct": bert_correct
-                        }
-                        writer2.writerow(row2)
-        # print(results)
+                    
+                    if field == 'Component':
+                        if change.get('to_value') != 'None':
+                            component = change.get('to_value')
+                
+                        # data.bert_correct = 1
+                        # save_core_data_main(data.id, data)
+                dictObj = {
+                    "id": data.id,
+                    "bert component": data.bert_component,
+                    "current component": component,
+                    "correct": bert_correct
+                }
+                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
     return None
 
 def first_member_analyze_ex():
@@ -123,119 +94,140 @@ def first_member_analyze_ex():
         datas = get_core_data_for_bert_correct(db)
         if not datas:
             return None
-        results = []
-        filename = "output.csv"
-        file_exists = os.path.isfile(filename)
-        with open(filename, mode='a', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=["id", "bert component", "analyze component", "correct"])
-            
-            if not file_exists:
-                writer.writeheader()  # 只在首次写入时加表头
+        daily_correct = 0
+        daily_error = 0
+        for data in datas:
+            if not data.bert_component:
+                continue
+            value = jira.getIssueHistory(data.id)
+            if not value:
+                continue
+            comments = value.get('comments')
+            if not comments:
+                continue
+            comments.sort(key=lambda x:x[2])
+            an_start = 0
+            author = ""
+            for comment in comments:
+                if 'Naiser-T3000' != comment[0]:
+                    if '日志说明' in comment[1]:
+                        an_start = comment[2]
+                        author = comment[0]
+                        break
+            bert_correct = True
+            component = ""
+            analyze_component = ""
 
-            filename2 = "output2.csv"
-            file_exists2 = os.path.isfile(filename2)
-            with open(filename2, mode='a', encoding='utf-8', newline='') as f:
-                writer2 = csv.DictWriter(f, fieldnames=["id", "bert component", "current component", "correct"])
-                
-                if not file_exists2:
-                    writer2.writeheader()  # 只在首次写入时加表头
-                for data in datas:
-                    if not data.bert_component:
-                        continue
-                    value = jira.getIssueHistory(data.id)
-                    if not value:
-                        continue
-                    comments = value.get('comments')
-                    comments.sort(key=lambda x:x[2])
-                    an_start = 0
-                    author = ""
-                    for comment in comments:
-                        if 'Naiser-T3000' != comment[0]:
-                            if '日志说明' in comment[1]:
-                                an_start = comment[2]
-                                author = comment[0]
-                                break
-                    bert_correct = True
-                    if an_start != 0:
-                        continue
-                        component = team.get(author)
-                        if "HMI" in component:
-                            if data.bert_component == "HMI":
-                                bert_correct = True
-                            else:
-                                bert_correct = False
-                        elif "Map" in component:
-                            if data.bert_component == "MapViewer" or data.bert_component == "DBU" or data.bert_component == "TI" or data.bert_component == "Positioning":
-                                bert_correct = True
-                            else:
-                                bert_correct = False
-                        elif "Route" in component:
-                            if data.bert_component == "Guidance" or data.bert_component == "Route Calculation":
-                                bert_correct = True
-                            else:
-                                bert_correct = False
-                        elif "Search" in component:
-                            if data.bert_component == "DI_POS_SDS":
-                                bert_correct = True
-                            else:
-                                bert_correct = False
-                        elif "System" in component:
-                            if data.bert_component == "System" or data.bert_component == "Activation":
-                                bert_correct = True
-                            else:
-                                bert_correct = False
-                        else:
-                            bert_correct = True
-                        results.append({
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "analyze component": component,
-                            "correct": bert_correct
-                        })
-                        row = {
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "analyze component": component,
-                            "correct": bert_correct
-                        }
-                        writer.writerow(row)
-
+            if an_start != 0:
+                component = team.get(author)
+                analyze_component = component
+                if "HMI" in component:
+                    if data.bert_component == "HMI":
+                        bert_correct = True
                     else:
-                        changes = value.get('changes')
-                        component = ""
-                        for change in changes:
-                            author = change.get('author')
-                            field = change.get('field')
-                            if field == 'status':
-                                status = change.get('to_value')
-                                if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
-                                    if component != getComponentReal(data.bert_component) and component != '':
-                                        bert_correct = False
-                                        break
-                            
-                            if field == 'Component':
-                                if change.get('to_value') != 'None':
-                                    component = change.get('to_value')
-                        
-                                # data.bert_correct = 1
-                                # save_core_data_main(data.id, data)
-                        results.append({
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "current component": component,
-                            "correct": bert_correct
-                        })
-                        row2 = {
-                            "id": data.id,
-                            "bert component": data.bert_component,
-                            "current component": component,
-                            "correct": bert_correct
-                        }
-                        writer2.writerow(row2)
-        # print(results)
+                        bert_correct = False
+                elif "Map" in component:
+                    if data.bert_component == "MapViewer" or data.bert_component == "DBU" or data.bert_component == "TI" or data.bert_component == "Positioning":
+                        bert_correct = True
+                    else:
+                        bert_correct = False
+                elif "Route" in component:
+                    if data.bert_component == "Guidance" or data.bert_component == "Route Calculation":
+                        bert_correct = True
+                    else:
+                        bert_correct = False
+                elif "Search" in component:
+                    if data.bert_component == "DI_POS_SDS":
+                        bert_correct = True
+                    else:
+                        bert_correct = False
+                elif "System" in component:
+                    if data.bert_component == "System" or data.bert_component == "Activation":
+                        bert_correct = True
+                    else:
+                        bert_correct = False
+                else:
+                    bert_correct = True
+                dictObj = {
+                    "id": data.id,
+                    "bert component": data.bert_component,
+                    "analyze component": analyze_component,
+                    "correct": bert_correct,
+                    "manually analyze": True
+                }
+                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
+            else:
+                changes = value.get('changes')
+                if not changes:
+                    continue
+                current_components = value.get('current_components')
+                if not current_components:
+                    continue
+                component = current_components[0]
+                analyze_component = component
+                for change in changes:
+                    author = change.get('author')
+                    field = change.get('field')
+                    if field == 'status':
+                        status = change.get('to_value')
+                        if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
+                            if component != getComponentReal(data.bert_component) and component not in ['', 'PM', 'UI Design'] and 'CL' not in component and 'FO' not in component and 'OC' not in component:
+                                bert_correct = False
+                                break
+                dictObj = {
+                    "id": data.id,
+                    "bert component": data.bert_component,
+                    "analyze component": analyze_component,
+                    "correct": bert_correct,
+                    "manually analyze": False
+                }
+                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
+
+            if bert_correct:
+                daily_correct += 1
+            else:
+                daily_error += 1
+            
+            # data.bert_correct = 1
+            # save_core_data_main(data.id, data, db)
+
+        # Calculate and Store Stats
+        ts = time.time()
+        daily_total = daily_correct + daily_error
+        daily_rate = daily_correct / daily_total if daily_total > 0 else 0
+        
+        # Cumulative
+        history_key = "BERT_CORRECT_STATS_HISTORY"
+        history = redis.lrange(history_key, -1, -1)
+        last_cum_correct = 0
+        last_cum_error = 0
+        if history:
+            try:
+                last_stat = json.loads(history[0])
+                last_cum_correct = last_stat.get('cumulative_correct', 0)
+                last_cum_error = last_stat.get('cumulative_error', 0)
+            except:
+                pass
+        
+        cum_correct = last_cum_correct + daily_correct
+        cum_error = last_cum_error + daily_error
+        cum_total = cum_correct + cum_error
+        cum_rate = cum_correct / cum_total if cum_total > 0 else 0
+        
+        stat_obj = {
+            "timestamp": ts,
+            "daily_correct": daily_correct,
+            "daily_error": daily_error,
+            "daily_rate": daily_rate,
+            "cumulative_correct": cum_correct,
+            "cumulative_error": cum_error,
+            "cumulative_rate": cum_rate
+        }
+        redis.rpush(history_key, json.dumps(stat_obj))
+
     return None
 
-def first_give_comment():
+def given_comment_3valid():
     # db_mgr = DatabaseManager(url)
     # with db_mgr.standalone_session() as db:
     filename = "output.csv"
@@ -293,11 +285,11 @@ def first_give_comment():
                 field = change.get('field')                        
                 if field == 'Component':
                     component = change.get('to_value')
-                    # if component in ['HMI', 'BL_MapViewer', 'BL_Guidance', 'BL_RouteCalculation', 'BL_DBU', 'BL_DI_POI_SDS', 'BL_Activation', 'BL_System', 'BL_Positioning', 'BL_TI']:
-                    if component in ['BL_Activation']:
+                    if component in ['HMI', 'BL_MapViewer', 'BL_Guidance', 'BL_RouteCalculation', 'BL_DBU', 'BL_DI_POI_SDS', 'BL_Activation', 'BL_System', 'BL_Positioning', 'BL_TI']:
+                    # if component in ['BL_Activation']:
                         break
-            # if component not in ['HMI', 'BL_MapViewer', 'BL_Guidance', 'BL_RouteCalculation', 'BL_DBU', 'BL_DI_POI_SDS', 'BL_Activation', 'BL_System', 'BL_Positioning', 'BL_TI']:
-            if component not in ['BL_Activation']:
+            if component not in ['HMI', 'BL_MapViewer', 'BL_Guidance', 'BL_RouteCalculation', 'BL_DBU', 'BL_DI_POI_SDS', 'BL_Activation', 'BL_System', 'BL_Positioning', 'BL_TI']:
+            # if component not in ['BL_Activation']:
                 continue
 
             if 'HMI' == component and Hmi > 19:
@@ -353,7 +345,7 @@ def first_give_comment():
                         dictObjList.append(dictObj)
                     # else:
                     #     print(f"{issue_key}:{author}:{an_start} llm not analyze {comm}")
-            if comment_count > 1:
+            if comment_count > 2:
                 jstr = json.dumps(dictObjList, ensure_ascii=False, indent=2)
                 row = {
                     "TicketID": issue_key,
@@ -413,4 +405,4 @@ def to_hms(total_seconds):
 
 def main(arg):
     # first_member_analyze_ex()
-    first_give_comment()
+    given_comment_3valid()

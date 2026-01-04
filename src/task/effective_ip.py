@@ -18,47 +18,6 @@ url = f"postgresql://postgres:neuadminpostgreroot@10.10.89.223:15432/naispilot"
 3. 现在AI介入后，AI登录comment后的下面一个该组组员登录的有效解析comment的时间对比bug登录时间的时间差，如果下一个登录有效解析comment的人不是这组的组员，那么以AI登录comment时间为准，计算解析时间差
 """
 
-raw = redis.get("ANALYZE_COST_INFO")
-if raw is None:
-    # 初始化默认值
-    dictitem = {
-        'total_count': 0,
-        'total_time': 0.0  # 或 int，取决于 time_diff 类型
-    }
-    redis.set("ANALYZE_COST_INFO", json.dumps(dictitem))
-
-def first_member_analyze():
-    db_mgr = DatabaseManager(url)
-    with db_mgr.standalone_session() as db:
-        datas = get_all_core_data(db)
-        if not datas:
-            return None
-        results = []
-        for data in datas:
-            if data.bert_component in ["DBU", "System", "Activation"]:
-                print(data.id)
-                print(data.bert_component)
-                value = jira.getIssueHistory(data.id)
-                comments = value.get('comments')
-                comments.sort(key=lambda x:x[2])
-                an_start = 0
-                for comment in comments:
-                    if 'Naiser-T3000' == comment[0]:
-                        if 'code:java' in comment or len(comment[1]) > 50:
-                            an_start = comment[2]
-                            break
-                        else:
-                            if llm_is_an(comment[1]):
-                                an_start = comment[2]
-                                break
-                if an_start != 0:
-                    results.append({
-                            'id': data.id,
-                            'created_at': value.get('created_at'),
-                            'an_start': an_start
-                        })
-        print(results)
-    return None
 
 def hmi_tag_change():
     db_mgr = DatabaseManager(url)
@@ -109,11 +68,13 @@ def hmi_tag_change():
                         
     return None
 
-def from_create_to_first_analyze(start, end):
+def manually_first_analyze(start, end):
     for i in range(start, end):
         issue = "NMASDK-" + str(i)
         
         data = jira.getIssueHistory(issue)
+        if data is None:
+            continue
         type = data.get('issuetype')
         if type is None:
             continue
@@ -121,6 +82,9 @@ def from_create_to_first_analyze(start, end):
             continue
         comments = data.get('comments')
         if comments is None:
+            continue
+        changes = data.get('changes')
+        if changes is None:
             continue
         comments.sort(key=lambda x:x[2])
         an_start = 0
@@ -136,19 +100,39 @@ def from_create_to_first_analyze(start, end):
                     if time_diff(data.get('create_at'), an_start) < 180: # tester add analyze comment
                         continue
                     break
-        if an_start != 0:
+
+        to_rejected_date = ''
+        to_resolved_date = ''
+        to_integration_date = ''
+        for change in changes:
+            field = change.get('field')
+            if field == 'status':
+                status = change.get('to_value')
+                if status == 'Rejected':
+                    to_rejected_date = change.get('date')
+                if status == 'Resolved':
+                    to_resolved_date = change.get('date')
+                if status == 'Integration':
+                    to_integration_date = change.get('date')
+                    break
+        created_at = data.get('created_at')
+        manually_an_start = an_start
+        if manually_an_start:
             dictObj = {
-                'id': issue,
-                'created_at': data.get('created_at'),
-                'an_start': an_start,
+                'TicketID': issue,
+                'created_at': created_at,
                 'author': author,
-                'time_diff': time_diff(data.get('created_at'), an_start),
+                "manually_first_ana_start": manually_an_start,
+                "create_at_to_manually_ana": time_diff(created_at, manually_an_start) if manually_an_start else 0,
+                "integration": to_integration_date,
+                "create_at_to_integration": time_diff(created_at, to_integration_date) if to_integration_date else 0,
+                "reject": to_rejected_date,
+                "create_at_to_reject": time_diff(created_at, to_rejected_date) if to_rejected_date else 0,
+                "resovled": to_resolved_date, 
+                "create_at_to_resovled": time_diff(created_at, to_resolved_date) if to_resolved_date else 0,
             }
+            # print(dictObj)
             redis.hset("FIRST_ANALYZE_HASH", issue, json.dumps(dictObj))
-            dictitem = json.loads(redis.get("ANALYZE_COST_INFO"))
-            dictitem['total_count'] += 1
-            dictitem['total_time'] += dictObj['time_diff']
-            redis.set("ANALYZE_COST_INFO", json.dumps(dictitem))
     return None
 
 def llm_is_an(comment, model='qwen3:30b-a3b'):
@@ -215,31 +199,11 @@ def to_fmt(ts):
 """
 
 def ai_first_analyze():
-    filename = "output.csv"
-    file_exists = os.path.isfile(filename)
     db_mgr = DatabaseManager(url)
     with db_mgr.standalone_session() as db:
         datas = get_core_data_berted(db)
         if not datas:
             return None
-        # with open(filename, mode='a', encoding='utf-8', newline='') as f:
-        #     writer = csv.DictWriter(f, fieldnames=["TicketID", 
-        #                                            "created_at", 
-        #                                            "bert_component", 
-        #                                            "ai_first_ana_start", 
-        #                                            "create_at_to_ai_ana", 
-        #                                            "manually_first_ana_start", 
-        #                                            "create_at_to_manually_ana", 
-        #                                            "integration", 
-        #                                            "create_at_to_integration", 
-        #                                            "reject", 
-        #                                            "create_at_to_reject", 
-        #                                            "resovled", 
-        #                                            "resovled_at_to_reject", 
-        #                                            "tool_name", 
-        #                                            "hmi_tag"])
-        #     if not file_exists:
-        #         writer.writeheader()
         for data in datas:
             value = jira.getIssueHistory(data.id)
             if not value:
@@ -315,8 +279,6 @@ def ai_first_analyze():
                 "hmi_tag": hmi_tag
             }
             redis.hset("analyze_effective_table", data.id, json.dumps(row))
-            # writer.writerow(row)
-            # print(row)
     return None
 
 """
