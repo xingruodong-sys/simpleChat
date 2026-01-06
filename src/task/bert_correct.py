@@ -3,7 +3,7 @@
 2. bug状态变更成reject、resovle，close，integration其中一种，变成integration的bug看下component跟AI分的一不一样，一样则认为分对了，其他状态的都认为分对了
 """
 
-from src.utils.coreData import get_core_data_for_bert_correct, save_core_data_main, get_core_data_main
+from src.utils.coreData import get_core_data_for_bert_correct, save_core_data_main, get_core_data_main, CoreDataMain
 from routers.webhooks import getComponentReal
 from src.helper import JiraSy
 from src.db.database import DatabaseManager
@@ -17,163 +17,98 @@ import time
 from src.task.effective_ip import llm_is_an
 
 jira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ1qaz")
-url = f"postgresql://postgres:neuadminpostgreroot@10.146.12.34:30432/naispilot"
+url = f"postgresql://postgres:neuadminpostgreroot@10.10.89.223:15432/naispilot"
 
-def first_member_analyze():
-    db_mgr = DatabaseManager(url)
-    with db_mgr.standalone_session() as db:
-        datas = get_core_data_for_bert_correct(db)
-        if not datas:
-            return None
+def first_member_analyze_ex(db):
+    datas = get_core_data_for_bert_correct(db)
+    if not datas:
+        return None
+    daily_correct = 0
+    daily_error = 0
+    for data in datas:
+        if not data.bert_component:
+            continue
+        value = jira.getIssueHistory(data.id)
+        if not value:
+            continue
+        comments = value.get('comments')
+        if not comments:
+            continue
+        comments.sort(key=lambda x:x[2])
+        an_start = 0
+        author = ""
+        for comment in comments:
+            if 'Naiser-T3000' != comment[0]:
+                if '日志说明' in comment[1]:
+                    an_start = comment[2]
+                    author = comment[0]
+                    break
+        bert_correct = True
+        is_finalized = False
+        component = ""
+        analyze_component = ""
 
-        for data in datas:
-            if not data.bert_component:
+        if an_start != 0:
+            is_finalized = True
+            component = team.get(author)
+            analyze_component = component
+            if "HMI" in component:
+                if data.bert_component == "HMI":
+                    bert_correct = True
+                else:
+                    bert_correct = False
+            elif "Map" in component:
+                if data.bert_component == "MapViewer" or data.bert_component == "DBU" or data.bert_component == "TI" or data.bert_component == "Positioning":
+                    bert_correct = True
+                else:
+                    bert_correct = False
+            elif "Route" in component:
+                if data.bert_component == "Guidance" or data.bert_component == "Route Calculation":
+                    bert_correct = True
+                else:
+                    bert_correct = False
+            elif "Search" in component:
+                if data.bert_component == "DI_POS_SDS":
+                    bert_correct = True
+                else:
+                    bert_correct = False
+            elif "System" in component:
+                if data.bert_component == "System" or data.bert_component == "Activation":
+                    bert_correct = True
+                else:
+                    bert_correct = False
+            else:
+                bert_correct = True
+            dictObj = {
+                "id": data.id,
+                "bert component": data.bert_component,
+                "analyze component": analyze_component,
+                "correct": bert_correct,
+                "manually analyze": True
+            }
+            redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
+        else:
+            changes = value.get('changes')
+            if not changes:
                 continue
-            value = jira.getIssueHistory(data.id)
-            if not value:
+            current_components = value.get('current_components')
+            if not current_components:
                 continue
-            comments = value.get('comments')
-            comments.sort(key=lambda x:x[2])
-            an_start = 0
-            for comment in comments:
-                if 'Naiser-T3000' != comment[0]:
-                    if '日志说明' in comment[1]:
-                        an_start = comment[2]
-                        break
-            bert_correct = True
-            if an_start != 0:
-                component = "NO CHANGE"
-                changes = value.get('changes')
-                for change in changes:
-                    author = change.get('author')
-                    field = change.get('field')
-                    if author != 'Naiser-T3000' and field == 'Component':
-                        date =change.get('date')
-                        if time_cmp(an_start, date):
-                            component = change.get('to_value')
+            component = current_components[0]
+            analyze_component = component
+            found_final_status = False
+            for change in changes:
+                author = change.get('author')
+                field = change.get('field')
+                if field == 'status':
+                    status = change.get('to_value')
+                    if status in ['Rejected', 'Resolved', 'Closed', 'Integration', 'Verification']:
+                        found_final_status = True
+                        if component != getComponentReal(data.bert_component) and component not in ['', 'PM', 'UI Design', 'UE Design'] and 'CL' not in component and 'FO' not in component and 'OC' not in component:
                             bert_correct = False
                             break
-                dictObj = {
-                    "id": data.id,
-                    "bert component": data.bert_component,
-                    "analyze component": component,
-                    "correct": bert_correct
-                }
-                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
-            else:
-                changes = value.get('changes')
-                component = ""
-                for change in changes:
-                    author = change.get('author')
-                    field = change.get('field')
-                    if field == 'status':
-                        status = change.get('to_value')
-                        if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
-                            if component != getComponentReal(data.bert_component) and component != '':
-                                bert_correct = False
-                                break
-                    
-                    if field == 'Component':
-                        if change.get('to_value') != 'None':
-                            component = change.get('to_value')
-                
-                        # data.bert_correct = 1
-                        # save_core_data_main(data.id, data)
-                dictObj = {
-                    "id": data.id,
-                    "bert component": data.bert_component,
-                    "current component": component,
-                    "correct": bert_correct
-                }
-                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
-    return None
-
-def first_member_analyze_ex():
-    db_mgr = DatabaseManager(url)
-    with db_mgr.standalone_session() as db:
-        datas = get_core_data_for_bert_correct(db)
-        if not datas:
-            return None
-        daily_correct = 0
-        daily_error = 0
-        for data in datas:
-            if not data.bert_component:
-                continue
-            value = jira.getIssueHistory(data.id)
-            if not value:
-                continue
-            comments = value.get('comments')
-            if not comments:
-                continue
-            comments.sort(key=lambda x:x[2])
-            an_start = 0
-            author = ""
-            for comment in comments:
-                if 'Naiser-T3000' != comment[0]:
-                    if '日志说明' in comment[1]:
-                        an_start = comment[2]
-                        author = comment[0]
-                        break
-            bert_correct = True
-            component = ""
-            analyze_component = ""
-
-            if an_start != 0:
-                component = team.get(author)
-                analyze_component = component
-                if "HMI" in component:
-                    if data.bert_component == "HMI":
-                        bert_correct = True
-                    else:
-                        bert_correct = False
-                elif "Map" in component:
-                    if data.bert_component == "MapViewer" or data.bert_component == "DBU" or data.bert_component == "TI" or data.bert_component == "Positioning":
-                        bert_correct = True
-                    else:
-                        bert_correct = False
-                elif "Route" in component:
-                    if data.bert_component == "Guidance" or data.bert_component == "Route Calculation":
-                        bert_correct = True
-                    else:
-                        bert_correct = False
-                elif "Search" in component:
-                    if data.bert_component == "DI_POS_SDS":
-                        bert_correct = True
-                    else:
-                        bert_correct = False
-                elif "System" in component:
-                    if data.bert_component == "System" or data.bert_component == "Activation":
-                        bert_correct = True
-                    else:
-                        bert_correct = False
-                else:
-                    bert_correct = True
-                dictObj = {
-                    "id": data.id,
-                    "bert component": data.bert_component,
-                    "analyze component": analyze_component,
-                    "correct": bert_correct,
-                    "manually analyze": True
-                }
-                redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
-            else:
-                changes = value.get('changes')
-                if not changes:
-                    continue
-                current_components = value.get('current_components')
-                if not current_components:
-                    continue
-                component = current_components[0]
-                analyze_component = component
-                for change in changes:
-                    author = change.get('author')
-                    field = change.get('field')
-                    if field == 'status':
-                        status = change.get('to_value')
-                        if status in ['Rejected', 'Resolved', 'Closed', 'Integration']:
-                            if component != getComponentReal(data.bert_component) and component not in ['', 'PM', 'UI Design'] and 'CL' not in component and 'FO' not in component and 'OC' not in component:
-                                bert_correct = False
-                                break
+            if found_final_status:
+                is_finalized = True
                 dictObj = {
                     "id": data.id,
                     "bert component": data.bert_component,
@@ -183,47 +118,48 @@ def first_member_analyze_ex():
                 }
                 redis.hset("bert_correct_table", data.id, json.dumps(dictObj))
 
+        if is_finalized:
             if bert_correct:
                 daily_correct += 1
+                data.bert_correct = 2
             else:
                 daily_error += 1
-            
-            # data.bert_correct = 1
-            # save_core_data_main(data.id, data, db)
+                data.bert_correct = 1
+            save_core_data_main(data.id, CoreDataMain.model_validate(data), db)
+            ts = int(time.time())
+            redis.rpush(f"daily_bert_rate:{ts}", data.id)
 
-        # Calculate and Store Stats
-        ts = time.time()
-        daily_total = daily_correct + daily_error
-        daily_rate = daily_correct / daily_total if daily_total > 0 else 0
-        
-        # Cumulative
-        history_key = "BERT_CORRECT_STATS_HISTORY"
-        history = redis.lrange(history_key, -1, -1)
-        last_cum_correct = 0
-        last_cum_error = 0
-        if history:
-            try:
-                last_stat = json.loads(history[0])
-                last_cum_correct = last_stat.get('cumulative_correct', 0)
-                last_cum_error = last_stat.get('cumulative_error', 0)
-            except:
-                pass
-        
-        cum_correct = last_cum_correct + daily_correct
-        cum_error = last_cum_error + daily_error
-        cum_total = cum_correct + cum_error
-        cum_rate = cum_correct / cum_total if cum_total > 0 else 0
-        
-        stat_obj = {
-            "timestamp": ts,
-            "daily_correct": daily_correct,
-            "daily_error": daily_error,
-            "daily_rate": daily_rate,
-            "cumulative_correct": cum_correct,
-            "cumulative_error": cum_error,
-            "cumulative_rate": cum_rate
-        }
-        redis.rpush(history_key, json.dumps(stat_obj))
+    ts = time.time()
+    daily_total = daily_correct + daily_error
+    daily_rate = daily_correct / daily_total if daily_total > 0 else 0
+
+    history_key = "BERT_CORRECT_STATS_HISTORY"
+    history = redis.lrange(history_key, -1, -1)
+    last_cum_correct = 0
+    last_cum_error = 0
+    if history:
+        try:
+            last_stat = json.loads(history[0])
+            last_cum_correct = last_stat.get('cumulative_correct', 0)
+            last_cum_error = last_stat.get('cumulative_error', 0)
+        except:
+            pass
+    
+    cum_correct = last_cum_correct + daily_correct
+    cum_error = last_cum_error + daily_error
+    cum_total = cum_correct + cum_error
+    cum_rate = cum_correct / cum_total if cum_total > 0 else 0
+    
+    stat_obj = {
+        "timestamp": ts,
+        "daily_correct": daily_correct,
+        "daily_error": daily_error,
+        "daily_rate": daily_rate,
+        "cumulative_correct": cum_correct,
+        "cumulative_error": cum_error,
+        "cumulative_rate": cum_rate
+    }
+    redis.rpush(history_key, json.dumps(stat_obj))
 
     return None
 

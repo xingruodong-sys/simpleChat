@@ -1,80 +1,138 @@
 import redis
 import json
 import os
-
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-# Import necessary components from your application
 from src.db.database import SessionLocal
-from src.db import crud, models
-from src.utils.coreData import CoreData as CoreDataSchema
-import redis
-import json
-import os
+from src.db import models
 
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
 
-# --- Redis Connection ---
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
 REDIS_PORT = int(os.getenv('REDIS_PORT_NAISPILOT', 6379))
 REDIS_PASSWORD = os.getenv('REDIS_PASSWD', '')
-
-
-HASHES_TO_SETTINGS = {
-    "HH_TO_SY_JIRA_HASH": "hh_to_sy_jira_hash",
-    "jira:custom_fields": "jira_custom_fields",
-    # Add other hashes here that should be migrated to the KeyValue table
-}
-
-CORE_DATA_HASH = "core_data"
 
 # ==============================================================================
 # MIGRATION LOGIC
 # ==============================================================================
 
-def migrate_core_data(redis_client: redis.Redis):
-    """Migrates all CoreData objects from a Redis hash to the PG table."""
-    print("Starting CoreData migration...")
-    all_core_data_json = redis_client.hgetall(CORE_DATA_HASH)
-    
-    print(f"  - Found {len(all_core_data_json)} items in Redis hash '{CORE_DATA_HASH}'.")
+def migrate_statistics(redis_client: redis.Redis):
+    print("Starting Statistics migration...")
+    db = SessionLocal()
+    try:
+        # 1. analyze_effective_table -> StatisticsEffectiveIp
+        print("Migrating analyze_effective_table...")
+        data = redis_client.hgetall("analyze_effective_table")
+        count = 0
+        for k, v in data.items():
+            try:
+                obj = json.loads(v)
+                # Ensure compatibility with model
+                # Model fields: TicketID, created_at, bert_component, ai_first_ana_start, ...
+                # JSON keys match mostly.
+                
+                db_obj = models.StatisticsEffectiveIp(
+                    TicketID=obj.get("TicketID"),
+                    created_at=str(obj.get("created_at", "")),
+                    bert_component=obj.get("bert_component"),
+                    ai_first_ana_start=float(obj.get("ai_first_ana_start", 0)),
+                    create_at_to_ai_ana=float(obj.get("create_at_to_ai_ana", 0)),
+                    manually_first_ana_start=float(obj.get("manually_first_ana_start", 0)),
+                    create_at_to_manually_ana=float(obj.get("create_at_to_manually_ana", 0)),
+                    integration=str(obj.get("integration", "")),
+                    create_at_to_integration=float(obj.get("create_at_to_integration", 0)),
+                    reject=str(obj.get("reject", "")),
+                    create_at_to_reject=float(obj.get("create_at_to_reject", 0)),
+                    resovled=str(obj.get("resovled", "")),
+                    create_at_to_resovled=float(obj.get("create_at_to_resovled", 0)),
+                    tool_name=obj.get("tool_name"),
+                    hmi_tag=obj.get("hmi_tag")
+                )
+                db.merge(db_obj)
+                count += 1
+            except Exception as e:
+                print(f"Error processing item {k}: {e}")
+        print(f"Migrated {count} records to StatisticsEffectiveIp.")
 
-    if not all_core_data_json:
-        print("No CoreData found in Redis. Skipping.")
-        return
+        # 2. FIRST_ANALYZE_HASH -> StatisticsManualEfficiency
+        print("Migrating FIRST_ANALYZE_HASH...")
+        data = redis_client.hgetall("FIRST_ANALYZE_HASH")
+        count = 0
+        for k, v in data.items():
+            try:
+                obj = json.loads(v)
+                db_obj = models.StatisticsManualEfficiency(
+                    TicketID=obj.get("TicketID"),
+                    created_at=str(obj.get("created_at", "")),
+                    author=obj.get("author"),
+                    manually_first_ana_start=float(obj.get("manually_first_ana_start", 0)),
+                    create_at_to_manually_ana=float(obj.get("create_at_to_manually_ana", 0)),
+                    integration=str(obj.get("integration", "")),
+                    create_at_to_integration=float(obj.get("create_at_to_integration", 0)),
+                    reject=str(obj.get("reject", "")),
+                    create_at_to_reject=float(obj.get("create_at_to_reject", 0)),
+                    resovled=str(obj.get("resovled", "")),
+                    create_at_to_resovled=float(obj.get("create_at_to_resovled", 0))
+                )
+                db.merge(db_obj)
+                count += 1
+            except Exception as e:
+                print(f"Error processing item {k}: {e}")
+        print(f"Migrated {count} records to StatisticsManualEfficiency.")
 
-    migrated_count = 0
-    for key, data_json in all_core_data_json.items():        
-        db = None
-        try:
-            db = SessionLocal()
-            # Validate with Pydantic model
-            pydantic_obj = CoreDataSchema.model_validate_json(data_json)
-            
-            # Check if data already exists
-            existing_record = crud.get_core_data(db, id=pydantic_obj.id)
-            if existing_record:
-                update_data = pydantic_obj.model_dump(exclude_unset=True)
-                for field, value in update_data.items():
-                    setattr(existing_record, field, value)
-                crud.update_core_data(db, core_data=existing_record)
-            else:
-                new_record = models.CoreData(**pydantic_obj.model_dump())
-                crud.create_core_data(db, core_data=new_record)
-            
-            migrated_count += 1
-        except Exception as e:
-            print(f"  - ERROR migrating key '{key}': {e}")
-            if db:
-                db.rollback() # Rollback on error for this specific item
-        finally:
-            if db:
-                db.close() # Close the session for this specific item
-    
-    print(f"CoreData migration finished. {migrated_count} records processed.")
+        # 3. bert_correct_table -> StatisticsBertCorrect
+        print("Migrating bert_correct_table...")
+        data = redis_client.hgetall("bert_correct_table")
+        count = 0
+        for k, v in data.items():
+            try:
+                obj = json.loads(v)
+                # Mapping keys with spaces
+                db_obj = models.StatisticsBertCorrect(
+                    id=obj.get("id"),
+                    bert_component=obj.get("bert component", ""),
+                    analyze_component=obj.get("analyze component", ""),
+                    correct=bool(obj.get("correct")),
+                    manually_analyze=bool(obj.get("manually analyze"))
+                )
+                db.merge(db_obj)
+                count += 1
+            except Exception as e:
+                print(f"Error processing item {k}: {e}")
+        print(f"Migrated {count} records to StatisticsBertCorrect.")
 
+        # 4. BERT_CORRECT_STATS_HISTORY -> StatisticsBertHistory
+        print("Migrating BERT_CORRECT_STATS_HISTORY...")
+        data = redis_client.lrange("BERT_CORRECT_STATS_HISTORY", 0, -1)
+        # Clear existing history to avoid duplicates if re-running
+        db.query(models.StatisticsBertHistory).delete()
+        count = 0
+        for v in data:
+            try:
+                obj = json.loads(v)
+                db_obj = models.StatisticsBertHistory(
+                    timestamp=int(obj.get("timestamp", 0)),
+                    daily_correct=int(obj.get("daily_correct", 0)),
+                    daily_error=int(obj.get("daily_error", 0)),
+                    daily_rate=float(obj.get("daily_rate", 0)),
+                    cumulative_correct=int(obj.get("cumulative_correct", 0)),
+                    cumulative_error=int(obj.get("cumulative_error", 0)),
+                    cumulative_rate=float(obj.get("cumulative_rate", 0))
+                )
+                db.add(db_obj)
+                count += 1
+            except Exception as e:
+                print(f"Error processing history item: {e}")
+        print(f"Migrated {count} records to StatisticsBertHistory.")
+        
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        print(f"Migration failed: {e}")
+    finally:
+        db.close()
 
 # ==============================================================================
 # MAIN EXECUTION
@@ -87,29 +145,25 @@ def main():
     try:
         print(f"Connecting to Redis at {REDIS_HOST}:{REDIS_PORT}...")
         redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, decode_responses=True)
-        redis_client.ping() # Test connection
+        redis_client.ping()
         print("Redis connection successful.")
 
-        # Test PG connection by creating a temporary session
         print("Connecting to PostgreSQL...")
         db_test = SessionLocal()
         db_test.execute(text("SELECT 1"))
         db_test.close()
         print("PostgreSQL connection successful.")
 
-        # --- Run Migration Tasks ---
-        migrate_core_data(redis_client)
-        migrate_simple_keys(redis_client)
-        migrate_hashes(redis_client)
+        migrate_statistics(redis_client)
 
         print("\n--- Data Migration Complete! ---")
 
     except Exception as e:
         print(f"\nAN ERROR OCCURRED: {e}")
-        print("Migration failed. Please check your database connections and settings.")
     finally:
-        # --- Close Connections ---
         if redis_client:
             redis_client.close()
             print("Redis connection closed.")
 
+if __name__ == "__main__":
+    main()

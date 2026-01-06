@@ -137,8 +137,11 @@ def build_feishu_message(message, url, secret, notify=False, title="Jira monitor
 # Main Loop
 # ======================================================================================
 
+last_bert_correct_run = None
+
 async def main(arg):
     """Main function to run the monitoring loop."""
+    global last_bert_correct_run
     print("Starting the monitoring service...")
     while True:
         cycle_seconds = 60
@@ -150,6 +153,17 @@ async def main(arg):
                     cycle_seconds = setting.monitoringCycle * 60
                 await check_stuck_tasks(setting, jiraConfig, db)
                 delete_task(setting)
+
+                # Daily task at 00:00
+                now = datetime.now()
+                if now.hour == 0 and (last_bert_correct_run is None or last_bert_correct_run.date() != now.date()):
+                    from src.task.bert_correct import first_member_analyze_ex
+                    print(f"Running daily task: first_member_analyze_ex at {now}")
+                    try:
+                        first_member_analyze_ex()
+                        last_bert_correct_run = now
+                    except Exception as e:
+                        print(f"Error running daily task first_member_analyze_ex: {e}")
     
         except Exception as e:
             print(f"ERROR: An exception occurred during the monitoring cycle: {e}")

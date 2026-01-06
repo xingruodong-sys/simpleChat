@@ -70,4 +70,59 @@ class CoreDataSub(Base):
     tool_llm_tokens = Column(Integer, default=0)
     tool_llm_tag = Column(String, default="")
 
+class StatisticsEffectiveIp(Base):
+    __tablename__ = "statistics_effective_ip"
+    
+    TicketID = Column(String, primary_key=True, index=True)
+    created_at = Column(String, default="")
+    bert_component = Column(String, default="")
+    ai_first_ana_start = Column(Float, default=0)
+    create_at_to_ai_ana = Column(Float, default=0)
+    manually_first_ana_start = Column(Float, default=0)
+    create_at_to_manually_ana = Column(Float, default=0)
+    integration = Column(String, default="")
+    create_at_to_integration = Column(Float, default=0)
+    reject = Column(String, default="")
+    create_at_to_reject = Column(Float, default=0)
+    resovled = Column(String, default="")
+    create_at_to_resovled = Column(Float, default=0)
+    tool_name = Column(String, default="")
+    hmi_tag = Column(String, default="")
+
+class StatisticsManualEfficiency(Base):
+    __tablename__ = "statistics_manual_efficiency"
+    
+    TicketID = Column(String, primary_key=True, index=True)
+    created_at = Column(String, default="")
+    author = Column(String, default="")
+    manually_first_ana_start = Column(Float, default=0)
+    create_at_to_manually_ana = Column(Float, default=0)
+    integration = Column(String, default="")
+    create_at_to_integration = Column(Float, default=0)
+    reject = Column(String, default="")
+    create_at_to_reject = Column(Float, default=0)
+    resovled = Column(String, default="")
+    create_at_to_resovled = Column(Float, default=0)
+
+class StatisticsBertCorrect(Base):
+    __tablename__ = "statistics_bert_correct"
+    
+    id = Column(String, primary_key=True, index=True)
+    bert_component = Column(String, default="")
+    analyze_component = Column(String, default="")
+    correct = Column(Boolean, default=False)
+    manually_analyze = Column(Boolean, default=False)
+
+class StatisticsBertHistory(Base):
+    __tablename__ = "statistics_bert_history"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    timestamp = Column(Integer, default=0)
+    daily_correct = Column(Integer, default=0)
+    daily_error = Column(Integer, default=0)
+    daily_rate = Column(Float, default=0.0)
+    cumulative_correct = Column(Integer, default=0)
+    cumulative_error = Column(Integer, default=0)
+    cumulative_rate = Column(Float, default=0.0)
+
 Base.metadata.create_all(bind=engine)
