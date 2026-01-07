@@ -173,36 +173,40 @@ else:
     st.info("No classification accuracy data available.")
 
 # --- BERT History Section ---
-st.header("AI Classification Trends (Daily & Cumulative)", divider='violet')
+st.header("AI Classification Trends (Weekly & Cumulative)", divider='violet')
 df_history = load_data(BERT_HISTORY_API_URL)
 
 if not df_history.empty:
-    if 'timestamp' in df_history.columns:
-        df_history['Date'] = pd.to_datetime(df_history['timestamp'], unit='s').dt.strftime('%Y-%m-%d %H:%M')
+    # Use week_start_str as the main date axis
+    if 'week_start_str' in df_history.columns:
+        df_history['Date'] = df_history['week_start_str']
+    elif 'timestamp' in df_history.columns:
+         # Fallback for old data if any
+        df_history['Date'] = pd.to_datetime(df_history['timestamp'], unit='s').dt.strftime('%Y-%m-%d')
     
     # Line Chart for Rates
     st.subheader("Accuracy Trend")
     
-    base = alt.Chart(df_history).encode(x='Date')
+    base = alt.Chart(df_history).encode(x=alt.X('Date', title='Week Start'))
     
-    line_daily = base.mark_line(color='orange').encode(
-        y=alt.Y('daily_rate', title='Rate (0-1)'),
-        tooltip=['Date', 'daily_rate']
+    line_weekly = base.mark_line(color='orange').encode(
+        y=alt.Y('weekly_rate', title='Rate (0-1)'),
+        tooltip=['Date', 'week_end_str', 'weekly_rate', 'weekly_correct', 'weekly_error']
     )
     
     line_cum = base.mark_line(color='green').encode(
         y=alt.Y('cumulative_rate', title='Rate (0-1)'),
-        tooltip=['Date', 'cumulative_rate']
+        tooltip=['Date', 'cumulative_rate', 'cumulative_correct', 'cumulative_error']
     )
     
-    chart_trend = (line_daily + line_cum).resolve_scale(y='shared').properties(title="Daily (Orange) vs Cumulative (Green) Accuracy Rate")
+    chart_trend = (line_weekly + line_cum).resolve_scale(y='shared').properties(title="Weekly (Orange) vs Cumulative (Green) Accuracy Rate")
     st.altair_chart(chart_trend, use_container_width=True)
     
     # Metrics for latest run
     latest = df_history.iloc[-1]
     hc1, hc2, hc3, hc4 = st.columns(4)
-    hc1.metric("Latest Daily Correct", latest.get('daily_correct', 0))
-    hc2.metric("Latest Daily Rate", f"{latest.get('daily_rate', 0)*100:.2f}%")
+    hc1.metric("Latest Weekly Correct", latest.get('weekly_correct', 0))
+    hc2.metric("Latest Weekly Rate", f"{latest.get('weekly_rate', 0)*100:.2f}%")
     hc3.metric("Cumulative Correct", latest.get('cumulative_correct', 0))
     hc4.metric("Cumulative Rate", f"{latest.get('cumulative_rate', 0)*100:.2f}%")
 

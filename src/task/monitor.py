@@ -154,16 +154,17 @@ async def main(arg):
                 await check_stuck_tasks(setting, jiraConfig, db)
                 delete_task(setting)
 
-                # Daily task at 00:00
+                # Weekly task at Sunday 24:00 (Monday 00:00)
                 now = datetime.now()
-                if now.hour == 0 and (last_bert_correct_run is None or last_bert_correct_run.date() != now.date()):
-                    from src.task.bert_correct import first_member_analyze_ex
-                    print(f"Running daily task: first_member_analyze_ex at {now}")
+                if now.weekday() == 0 and now.hour == 0 and (last_bert_correct_run is None or last_bert_correct_run.date() != now.date()):
+                    from src.task.bert_correct import collect_bert_stats, import_bert_weekly_stats
+                    print(f"Running weekly task: collect_bert_stats at {now}")
                     try:
-                        first_member_analyze_ex()
+                        collect_bert_stats(db)
+                        import_bert_weekly_stats(db)
                         last_bert_correct_run = now
                     except Exception as e:
-                        print(f"Error running daily task first_member_analyze_ex: {e}")
+                        print(f"Error running weekly task collect_bert_stats: {e}")
     
         except Exception as e:
             print(f"ERROR: An exception occurred during the monitoring cycle: {e}")

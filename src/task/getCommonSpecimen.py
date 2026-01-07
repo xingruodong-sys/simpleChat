@@ -132,19 +132,19 @@ def getTheFirstComponent(comments, current_component):
     # trafficMember = {}
 
     MemberList = {
-        'DI_POS_SDS':searchMember,
+        'BL_DI_POI_SDS':searchMember,
         'HMI':HMIMember,
-        'System':systemMember,
-        'MapViewer':mapMember,
-        'DBU':DBUPosMember,
-        'Activation':activationMember,
-        'Guidance':guidanceMember,
-        'Route Calculation':routeMember,
-        # 'TI':trafficMember
+        'BL_System':systemMember,
+        'BL_MapViewer':mapMember,
+        'BL_DBU':DBUPosMember,
+        'BL_Activation':activationMember,
+        'BL_Guidance':guidanceMember,
+        'BL_RouteCalculation':routeMember,
+        # 'BL_TI':trafficMember
     }
     
     Log.info(f"current_component = {current_component}")
-    if current_component == 'TI':
+    if current_component == 'BL_TI':
         for comment in comments:
             name = comment[0]
             body = comment[1]
@@ -162,106 +162,75 @@ def getTheFirstComponent(comments, current_component):
                     component = member
                     Log.info(f"comment = {name}, add = {body}")
                     if name == 'mazhch':
-                        if current_component != 'Activation':
+                        if current_component != 'BL_Activation':
                             component = member
                         else:
-                            component = 'Activation'
+                            component = 'BL_Activation'
                     if name == 'fangf' or name == 'qiuye':
                         component = current_component
                     break
             break
 
-    if 'Activation' == component and current_component == 'DBU':
+    if 'BL_Activation' == component and current_component == 'BL_DBU':
         component = 'Activation_DBU'
+
+    if 'HMI' == component and current_component == 'HMI_Platform_VR':
+        component = 'HMI_Platform_VR'
+    
+    if current_component == "Performance":
+        component = "Performance"
 
     Log.info (f'component={component}, name={name}')
     return component, name
 
-
-if __name__ == "__main__":
+def bert_resource():
     componentDict = {
-        'DI_POS_SDS' : COMPONENTS_SEARCH_HASH,
-        'HMI' : COMPONENTS_HMI_HASH,
-        'System' : COMPONENTS_SYSTEM_HASH,
-        'MapViewer' : COMPONENTS_MAP_HASH,
-        'DBU' : COMPONENTS_DBU_POS_HASH,
-        'Positioning' : COMPONENTS_DBU_POS_HASH,
-        'Activation' : COMPONENTS_ACTIVITION_HASH,
-        'Guidance' : COMPONENTS_GUIDANCE_HASH,
-        'Route Calculation' : COMPONENTS_ROUTE_HASH,
-        'TI': COMPONENTS_TI_HASH,
-        'Activation_DBU': COMPONENTS_ACTIVITION_DBU_HASH,
-        'HMI_VR': COMPONENTS_HMI_VR_HASH
+        'BL_DI_POI_SDS' : BL_COMPONENTS_SEARCH_HASH,
+        'HMI' : BL_COMPONENTS_HMI_HASH,
+        'BL_System' : BL_COMPONENTS_SYSTEM_HASH,
+        'BL_MapViewer' : BL_COMPONENTS_MAP_HASH,
+        'BL_DBU' : BL_COMPONENTS_DBU_POS_HASH,
+        'Positioning' : BL_COMPONENTS_DBU_POS_HASH,
+        'BL_Activation' : BL_COMPONENTS_ACTIVITION_HASH,
+        'BL_Guidance' : BL_COMPONENTS_GUIDANCE_HASH,
+        'BL_RouteCalculation' : BL_COMPONENTS_ROUTE_HASH,
+        'BL_TI': BL_COMPONENTS_TI_HASH,
+        'Activation_DBU': BL_COMPONENTS_ACTIVITION_DBU_HASH,
+        'HMI_Platform_VR': BL_COMPONENTS_HMI_VR_HASH,
+        'Performance': BL_COMPONENTS_PERFORMANCE_HASH,
     }
 
-    # Test with a sample issue key
     try:
-        dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ")
-        jql = "project = NMASDK AND component = 'Voice Recognition'"
-        keys = dejira.getIssuesByJql(jql)
-        datas = []
-        # for issue_key in keys:
-        #     history = Jira.getIssueHistory(issue_key)
-        #     # Print the formatted results
-        #     if "error" in history:
-        #         Log.error(f"{issue_key} Error: {history['error']}")
-        #         continue
-        #     if 'Product bug' != history['issuetype']:
-        #         Log.info(f"{issue_key} : {history['issuetype']} is not a bug")
-        #         continue
-
-        #     comments = history['comments']
-        #     current_components = ''
-        #     if history['current_components']:
-        #         current_components = history['current_components'][0]
-        #     component, user = getTheFirstComponent(comments, current_components)
-
-        #     datas.append({
-        #         "issue_key": issue_key,
-        #         "component": component
-        #     })
-        # with open("component.csv", "w", newline="", encoding="utf-8") as f:
-        #     if datas:  # 确保数据不为空
-        #         writer = csv.DictWriter(f, fieldnames=["issue_key", "component"])
-        #         writer.writeheader()  # 写表头
-        #         writer.writerows(datas)
-        # for i in range(70000, 0, -1):
-        for issue_key in keys:
-            # issue_key = "NMASDK-" + str(i)
-            history = JiraSy.getIssueHistory(issue_key)
-            # Print the formatted results
-            if "error" in history:
-                Log.error(f"{issue_key} Error: {history['error']}")
+        dejira = JiraSy.JiraImp("https://naisjira.neusoft.com", "xingrd", "1qaz!QAZ1qaz")
+        for i in range(100000, 0, -1):
+            issue_key = "NMASDK-" + str(i)
+            history = dejira.getIssueHistory(issue_key)
+            if not history:
                 continue
-            if 'Product bug' != history['issuetype']:
-                Log.info(f"{issue_key} : {history['issuetype']} is not a bug")
+            type = history.get('issuetype')
+            if type is None:
+                continue
+            if type.name != "Product bug":
+                continue
+            comments = history.get('comments')
+            if not comments:
+                continue
+            current_components = history.get('current_components')
+            if not current_components:
                 continue
 
-            Log.info(f"{issue_key} - {history['summary']}")
-            # Log.info(f"{issue_key} - {history['current_status']}")
-            Log.info(f"{issue_key} - {', '.join(history['current_components'])}")
-
-            comments = history['comments']
-            current_components = ''
-            if history['current_components']:
-                current_components = history['current_components'][0]
+            current_components = current_components[0]
             component, user = getTheFirstComponent(comments, current_components)
-            if component == "HMI":
-                component = "HMI_VR"
-            else:
-                continue
-
-            dictObj = {}
-            dictObj[COMMITMODULE] = current_components
-            dictObj[REALMODULE] = component
-            dictObj[SUMMARY] = history['summary']
-            dictObj[USER] = user
-            dictObj[ISSUETYPE] = history['issuetype']
-            jstr = json.dumps(dictObj)
+            dictObj = {
+                COMMITMODULE: current_components,
+                REALMODULE: component,
+                SUMMARY: history['summary'],
+                USER: user,
+            }
             if component in componentDict.keys():
-                redis.hset(componentDict[component], issue_key, jstr)
+                redis.hset(componentDict[component], issue_key, json.dumps(dictObj))
             else:
-                redis.hset(COMPONENTS_OTHER_HASH, issue_key, jstr)
+                redis.hset(COMPONENTS_OTHER_HASH, issue_key, json.dumps(dictObj))
 
     except Exception as e:
         print(f"Error: {e}")

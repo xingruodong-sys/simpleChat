@@ -125,4 +125,19 @@ class StatisticsBertHistory(Base):
     cumulative_error = Column(Integer, default=0)
     cumulative_rate = Column(Float, default=0.0)
 
+class StatisticsBertWeeklyHistory(Base):
+    __tablename__ = "statistics_bert_weekly_history"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    week_start = Column(Float, default=0)
+    week_end = Column(Float, default=0)
+    week_start_str = Column(String, default="")
+    week_end_str = Column(String, default="")
+    weekly_correct = Column(Integer, default=0)
+    weekly_error = Column(Integer, default=0)
+    weekly_rate = Column(Float, default=0.0)
+    cumulative_correct = Column(Integer, default=0)
+    cumulative_error = Column(Integer, default=0)
+    cumulative_rate = Column(Float, default=0.0)
+
 Base.metadata.create_all(bind=engine)

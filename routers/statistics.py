@@ -48,7 +48,7 @@ def get_bert_correct_statistics():
 
 @router.get("/bert_correct_history")
 def get_bert_correct_history():
-    data = redis.lrange("BERT_CORRECT_STATS_HISTORY", 0, -1)
+    data = redis.lrange("BERT_CORRECT_WEEKLY_STATS", 0, -1)
     results = []
     if data:
         for item in data:
