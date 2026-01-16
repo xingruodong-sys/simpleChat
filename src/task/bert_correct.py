@@ -451,7 +451,8 @@ def given_comment_3valid():
                     "Summary": history['summary'],
                     "Comments": jstr
                 }
-                writer.writerow(row)
+                # 将结果存入 Redis
+                redis.hset('BERT_COMMENTS_TABLE', issue_key, json.dumps(row, ensure_ascii=False))
                 if 'HMI' == component:
                     Hmi += 1
                 if 'BL_MapViewer'  == component:

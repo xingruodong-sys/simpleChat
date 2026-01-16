@@ -234,3 +234,36 @@ def bert_resource():
 
     except Exception as e:
         print(f"Error: {e}")
+
+def bert_resource_ex():
+    componentDict = {
+        'BL_DI_POI_SDS' : BL_COMPONENTS_SEARCH_HASH,
+        'HMI' : BL_COMPONENTS_HMI_HASH,
+        'BL_System' : BL_COMPONENTS_SYSTEM_HASH,
+        'BL_MapViewer' : BL_COMPONENTS_MAP_HASH,
+        'BL_DBU' : BL_COMPONENTS_DBU_POS_HASH,
+        'Positioning' : BL_COMPONENTS_DBU_POS_HASH,
+        'BL_Activation' : BL_COMPONENTS_ACTIVITION_HASH,
+        'BL_Guidance' : BL_COMPONENTS_GUIDANCE_HASH,
+        'BL_RouteCalculation' : BL_COMPONENTS_ROUTE_HASH,
+        'BL_TI': BL_COMPONENTS_TI_HASH,
+        'Activation_DBU': BL_COMPONENTS_ACTIVITION_DBU_HASH,
+        'HMI_Platform_VR': BL_COMPONENTS_HMI_VR_HASH,
+        'Performance': BL_COMPONENTS_PERFORMANCE_HASH,
+    }
+
+    try:
+        keys = redis.hkeys(COMPONENTS_OTHER_HASH)
+        for issue_key in keys:
+            redis_data = redis.hget(COMPONENTS_OTHER_HASH, issue_key)
+            history = json.loads(redis_data)
+            component = history.get(REALMODULE)
+            if not component:
+                continue
+            if component == 'FO_TI':
+                redis.hset('BL_TI', issue_key, history)
+            if component == 'FO_DBU':
+                redis.hset('BL_DBU', issue_key, history)
+
+    except Exception as e:
+        print(f"Error: {e}")
