@@ -131,12 +131,15 @@ def change_name_to_team():
     # 获取 name 到 team 的映射
     name_to_team = {}
     team_person_email_list = redis.lrange('TEAM_PERSON_EMAIL_LIST', 0, -1)
+    print(f"Loaded {len(team_person_email_list)} entries from TEAM_PERSON_EMAIL_LIST")
     for entry in team_person_email_list:
         parts = entry.decode('utf-8').split(',') if isinstance(entry, bytes) else entry.split(',')
         if len(parts) >= 4:
             team = parts[0]
             name = parts[3]
             name_to_team[name] = team
+            print(f"Mapped {name} -> {team}")
+    print(f"name_to_team: {name_to_team}")
 
     items = [
         "NMASDK-70295",
@@ -185,11 +188,18 @@ def change_name_to_team():
             # 替换 [~name] 为对应的 team
             def replace_func(match):
                 mentioned_name = match.group(1)
+                print(f"Found mention: [~{mentioned_name}] in comment by {author}")
                 if mentioned_name in name_to_team:
-                    return name_to_team[mentioned_name]
+                    replacement = name_to_team[mentioned_name]
+                    print(f"Replacing [~{mentioned_name}] with {replacement}")
+                    return replacement
                 else:
+                    print(f"No mapping found for {mentioned_name}, keeping original")
                     return match.group(0)  # 如果找不到，保持原样
-            comm = re.sub(r'\[~(\w+)\]', replace_func, comm)
+            original_comm = comm
+            comm = re.sub(r'\[~([\w.-]+)\]', replace_func, comm)
+            if comm != original_comm:
+                print(f"Comment changed: {original_comm} -> {comm}")
             dictObj = {
                 'Time': an_start,
                 'Author': author,
